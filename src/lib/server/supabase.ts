@@ -10,7 +10,8 @@ let admin: SupabaseClient | null = null;
 export function supabaseAdmin(): SupabaseClient {
   if (admin) return admin;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY;
+  // Either key name works: newer projects say "secret", older ones "service_role".
+  const key = process.env.SUPABASE_SECRET_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Supabase is not configured (NEXT_PUBLIC_SUPABASE_URL / SUPABASE_SECRET_KEY)");
   admin = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
   return admin;
