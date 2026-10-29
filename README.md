@@ -38,13 +38,20 @@ The deck and everyone's cards live in `room_secrets`, which no browser can read.
 
 - Supabase free projects pause after 7 days without activity. Open the Supabase dashboard on the day and press **Restore** if it's paused.
 
+## Run it on your laptop (no Supabase needed)
+
+1. Install **Node.js 20 or newer** (LTS) from nodejs.org.
+2. Open a terminal in this folder and run `npm install` (first time only).
+3. Run `npm run local` and open http://localhost:3000.
+4. Each new browser tab is another player. Friends on the same Wi-Fi can join using the address it prints.
+
+Test mode keeps everything in memory and skips real sign-in, so use it only on your own network. Stopping it (Ctrl+C) ends all games.
+
 ## Developing
 
 ```bash
-npm install
-npm test                      # rule tests + 400 random bot games
-# Run locally without Supabase (in-memory, several tabs = several players):
-GLOOPY_MEMORY_STORE=1 NEXT_PUBLIC_GLOOPY_DEV=1 npm run dev
+npm test      # rule tests + 400 random bot games
+npm run dev   # real mode: needs a .env.local with the 3 Supabase values
 ```
 
 ## Adding your own stickers and GIFs
