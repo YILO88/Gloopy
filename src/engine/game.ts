@@ -257,7 +257,12 @@ function startHandMut(state: GameState, now: number, rng: Rng): GameState {
     };
   }
   // Deal two cards each, one at a time, starting left of the button.
-  for (let r = 0; r < 2; r++) for (const id of order) seats[id].hole.push(deck[0]), (deck = deck.slice(1));
+  for (let r = 0; r < 2; r++) {
+    for (const id of order) {
+      seats[id].hole.push(deck[0]);
+      deck = deck.slice(1);
+    }
+  }
 
   state.handNumber += 1;
   const hand: Hand = {
@@ -708,6 +713,8 @@ export interface PublicGame {
   seats: PublicSeat[];
   result: HandResult | null; // only face-up cards are included
   ranking: RankEntry[] | null;
+  /** What the player whose turn it is may do (not secret: everyone can work it out). */
+  legal: Legal | null;
   finishedAt: number | null;
 }
 
@@ -751,6 +758,7 @@ export function publicView(state: GameState): PublicGame {
     result: h?.result ? clone(h.result) : null,
     ranking: state.ranking ?? null,
     finishedAt: state.finishedAt ?? null,
+    legal: h?.toAct ? legalActions(state, h.toAct) : null,
   };
 }
 

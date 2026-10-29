@@ -1,26 +1,146 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  Gloopy design tokens
+  Lobby mood: cobalt pond, ink outlines, lime + bubblegum, chunky "sticker" panels with hard shadows.
+  Table mood: bottle-green room, green felt, walnut rim, brass details, quiet type.
+*/
+@theme {
+  --color-pond: #2e5bff;
+  --color-pond-deep: #1f3fd1;
+  --color-ink: #1c1b3a;
+  --color-lime: #b6f23a;
+  --color-lime-deep: #8fcc12;
+  --color-gum: #ff5fa2;
+  --color-paper: #ffffff;
+  --color-mist: #dce6ff;
+
+  --color-room: #0d1f17;
+  --color-felt: #1e6b45;
+  --color-felt-deep: #134a30;
+  --color-rim: #5a3415;
+  --color-brass: #d4a84b;
+  --color-chalk: #f1f0ea;
+  --color-dim: #9bb3a6;
+  --color-alert: #ff6b5b;
+
+  --font-display: "Baloo 2", "Rubik", system-ui, sans-serif;
+  --font-sans: "Rubik", system-ui, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  color: var(--color-ink);
+  background: var(--color-pond);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sticker panels: thick ink outline + hard offset shadow */
+.sticker {
+  background: var(--color-paper);
+  border: 3px solid var(--color-ink);
+  border-radius: 22px;
+  box-shadow: 0 6px 0 var(--color-ink);
+}
+
+.btn {
+  font-family: var(--font-display);
+  font-weight: 800;
+  border: 3px solid var(--color-ink);
+  border-radius: 16px;
+  box-shadow: 0 4px 0 var(--color-ink);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+}
+.btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--color-ink);
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.field {
+  border: 3px solid var(--color-ink);
+  border-radius: 14px;
+  background: var(--color-paper);
+  padding: 0.6rem 0.85rem;
+  font-weight: 500;
+}
+.field:focus {
+  outline: none;
+  box-shadow: 0 0 0 4px var(--color-lime);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-lime);
+  outline-offset: 2px;
+}
+
+/* Table controls: quiet, serious */
+.tbtn {
+  border-radius: 12px;
+  font-weight: 600;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  transition: filter 80ms ease, transform 80ms ease;
+}
+.tbtn:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.92);
+}
+.tbtn:disabled {
+  opacity: 0.4;
+}
+
+/* Gloop wobble when picked */
+@keyframes wobble {
+  0% { transform: scale(1, 1); }
+  30% { transform: scale(1.12, 0.88); }
+  55% { transform: scale(0.94, 1.06); }
+  80% { transform: scale(1.03, 0.97); }
+  100% { transform: scale(1, 1); }
+}
+.wobble {
+  animation: wobble 520ms ease-out;
+  transform-origin: 50% 90%;
+}
+
+/* Placeholder GIF motions */
+@keyframes g-bounce { 0%, 100% { transform: translateY(0) scale(1, 1); } 40% { transform: translateY(-18%) scale(0.95, 1.05); } 60% { transform: translateY(0) scale(1.08, 0.92); } }
+@keyframes g-spin { to { transform: rotate(360deg); } }
+@keyframes g-shake { 0%, 100% { transform: translateX(0) rotate(0); } 25% { transform: translateX(-8%) rotate(-6deg); } 75% { transform: translateX(8%) rotate(6deg); } }
+@keyframes g-rain { 0% { transform: translateY(-40%); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(120%); opacity: 0; } }
+.g-bounce { animation: g-bounce 700ms ease-in-out infinite; transform-origin: 50% 100%; }
+.g-spin { animation: g-spin 1.1s linear infinite; }
+.g-shake { animation: g-shake 260ms ease-in-out infinite; }
+.g-rain { animation: g-rain 1.2s linear infinite; }
+
+/* Sticker reaction pop over a seat */
+@keyframes pop {
+  0% { transform: translate(-50%, 10px) scale(0.4); opacity: 0; }
+  15% { transform: translate(-50%, -6px) scale(1.1); opacity: 1; }
+  25% { transform: translate(-50%, 0) scale(1); }
+  85% { opacity: 1; }
+  100% { transform: translate(-50%, -14px) scale(1); opacity: 0; }
+}
+.pop {
+  animation: pop 2.6s ease-out forwards;
+}
+
+/* Turn timer ring */
+@keyframes ring { from { stroke-dashoffset: 0; } to { stroke-dashoffset: var(--ring-len); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .wobble, .g-bounce, .g-spin, .g-shake, .g-rain, .pop { animation: none !important; }
+  .pop { opacity: 1; transform: translate(-50%, 0); }
 }
