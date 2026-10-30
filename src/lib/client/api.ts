@@ -38,10 +38,16 @@ export async function identity(): Promise<{ id: string; token: string }> {
     return { id, token: "dev-" + id };
   }
   const sb = supabase();
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL) throw new Error("Couldn't sign in: the Supabase URL is missing from Vercel's settings.");
   let { data } = await sb.auth.getSession();
   if (!data.session) {
     const res = await sb.auth.signInAnonymously();
-    if (res.error) throw new Error("Couldn't sign in. Check your connection and reload.");
+    if (res.error) {
+      const why = res.error.message || "";
+      if (/anonymous/i.test(why) && /disabled/i.test(why))
+        throw new Error("Couldn't sign in: anonymous sign-ins are turned off in Supabase (Authentication → Sign In / Providers).");
+      throw new Error(`Couldn't sign in: ${why || "check your connection and reload."}`);
+    }
     ({ data } = await sb.auth.getSession());
   }
   return { id: data.session!.user.id, token: data.session!.access_token };
