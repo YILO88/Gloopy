@@ -46,7 +46,14 @@ export function waitingQueue(room: Room): Member[] {
 }
 
 /** Joining the lobby takes a seat if one is free; otherwise (or once the game has started) you wait and watch. */
+/** Names are unique at a table (ignoring case and spaces), so nobody can pose as someone else. */
+export function nameTaken(room: Room, name: string, exceptId: string): boolean {
+  const key = (s: string) => s.replace(/\s+/g, "").toLowerCase();
+  return room.members.some((m) => m.id !== exceptId && key(m.name) === key(name));
+}
+
 export function joinRoom(room: Room, who: Entrant, now: number): Room {
+  if (nameTaken(room, who.name, who.id)) throw new GameError(`"${who.name}" is already at this table. Pick another nickname.`);
   const r = clone(room);
   const existing = r.members.find((m) => m.id === who.id);
   if (existing) {

@@ -24,6 +24,7 @@ export function useRoom(code: string) {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [online, setOnline] = useState<Set<string> | null>(null); // who has the game open right now
   const offset = useRef(0); // server clock minus my clock
   const roomRef = useRef<PublicRoom | null>(null);
 
@@ -84,7 +85,8 @@ export function useRoom(code: string) {
         if (!cancelled && data) setChat((data as ChatMessage[]).reverse());
       });
     const ch = sb
-      .channel(`room:${code}`)
+      .channel(`room:${code}`, { config: { presence: { key: me } } })
+      .on("presence", { event: "sync" }, () => setOnline(new Set(Object.keys(ch.presenceState()))))
       .on("postgres_changes", { event: "*", schema: "public", table: "rooms", filter: `code=eq.${code}` }, (p) => {
         const state = (p.new as { state?: PublicRoom }).state;
         if (!state) return;
@@ -101,7 +103,9 @@ export function useRoom(code: string) {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_code=eq.${code}` }, (p) => {
         setChat((c) => [...c.slice(-99), p.new as ChatMessage]);
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (status === "SUBSCRIBED") void ch.track({ at: Date.now() });
+      });
     // If the phone was asleep, catch up when it wakes.
     const wake = () => {
       if (document.visibilityState === "visible") api(`/api/rooms/${code}`).then(accept).catch(() => {});
@@ -158,6 +162,9 @@ export function useRoom(code: string) {
   );
 
   const myCards = room?.game && cards.hand === room.game.handNumber ? cards.cards : [];
+  // Test mode has no presence: fall back to who hasn't left.
+  const isOnline = (id: string) =>
+    online ? online.has(id) : !!room?.members.find((m) => m.id === id && m.connected);
 
   return {
     me,
@@ -169,6 +176,7 @@ export function useRoom(code: string) {
     notFound,
     busy,
     serverNow,
+    isOnline,
     join: (name: string, avatar: string) => send({ op: "join", name, avatar }),
     leave: () => send({ op: "leave" }),
     start: () => send({ op: "start" }),

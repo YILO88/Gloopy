@@ -71,6 +71,7 @@ export function TableApp({ code }: { code: string }) {
       busy={r.busy}
       error={r.error}
       serverNow={r.serverNow}
+      isOnline={r.isOnline}
       onAct={r.act}
       onChat={r.sendChat}
       onLeave={leave}

@@ -364,6 +364,15 @@ describe("rooms, lobby and waiting room", () => {
     expect(r.members.find((m) => m.id === "late")!.role).toBe("waiting");
   });
 
+  it("nicknames are unique at a table (ignoring case and spaces)", () => {
+    let r = createRoom("ABCDE", { id: "host", name: "Mina", avatar: "lime" }, T0);
+    expect(() => joinRoom(r, { id: "x", name: "mina", avatar: "sky" }, T0 + 1)).toThrow(/already at this table/);
+    expect(() => joinRoom(r, { id: "x", name: "M ina", avatar: "sky" }, T0 + 1)).toThrow(/already at this table/);
+    r = joinRoom(r, { id: "host", name: "Mina", avatar: "sky" }, T0 + 2); // rejoining as yourself is fine
+    r = joinRoom(r, { id: "x", name: "Kofi", avatar: "sky" }, T0 + 3);
+    expect(r.members.map((m) => m.name)).toEqual(["Mina", "Kofi"]);
+  });
+
   it("only the host changes settings, and only in the lobby", () => {
     const r = createRoom("ABCDE", E("host"), T0);
     expect(() => updateSettings(r, "someone", settings())).toThrow(/Only the host/);

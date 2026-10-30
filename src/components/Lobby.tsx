@@ -56,15 +56,18 @@ export function Lobby({
           Leave
         </button>
         <span className="font-display text-4xl font-extrabold text-lime [text-shadow:0_3px_0_#1c1b3a]">gloopy</span>
-        <span className="w-16" />
+        {host ? (
+          <button className="btn bg-lime px-3 py-1 text-base lg:invisible" disabled={busy || players.length < 2} onClick={onStart}>
+            Start
+          </button>
+        ) : (
+          <span className="w-16" />
+        )}
       </header>
 
       <div className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[1fr_1fr_1fr]">
         {/* Players */}
-        <section className="sticker p-4" aria-labelledby="players-h">
-          <h2 id="players-h" className="mb-3 font-display text-2xl font-extrabold">
-            Players {players.length}/{s.maxSeats}
-          </h2>
+        <Fold title={`Players ${players.length}/${s.maxSeats}`} defaultOpen>
           <ul className="space-y-2">
             {players.map((m) => (
               <li key={m.id} className={`flex items-center gap-3 rounded-2xl border-[3px] border-ink px-2 py-1.5 ${m.id === me ? "bg-lime" : "bg-mist"}`}>
@@ -81,11 +84,16 @@ export function Lobby({
               </li>
             ))}
             {Array.from({ length: Math.max(0, s.maxSeats - players.length) }).map((_, i) => (
-              <li key={i} className="flex items-center gap-3 rounded-2xl border-[3px] border-dashed border-ink/25 px-2 py-1.5 text-ink/40">
+              <li key={i} className="hidden items-center gap-3 rounded-2xl border-[3px] border-dashed border-ink/25 px-2 py-1.5 text-ink/40 lg:flex">
                 <span className="h-10 w-10 rounded-full border-[3px] border-dashed border-ink/25" />
                 <span className="font-display text-lg font-bold">Empty seat</span>
               </li>
             ))}
+            {s.maxSeats > players.length && (
+              <li className="rounded-2xl border-[3px] border-dashed border-ink/25 px-3 py-1.5 text-center font-display font-bold text-ink/45 lg:hidden">
+                {s.maxSeats - players.length} empty {s.maxSeats - players.length === 1 ? "seat" : "seats"}
+              </li>
+            )}
           </ul>
           {waiting.length > 0 && (
             <>
@@ -101,13 +109,10 @@ export function Lobby({
               </ol>
             </>
           )}
-        </section>
+        </Fold>
 
         {/* Table setup */}
-        <section className="sticker flex flex-col p-4" aria-labelledby="setup-h">
-          <h2 id="setup-h" className="font-display text-2xl font-extrabold">
-            Table setup
-          </h2>
+        <Fold title="Table setup" defaultOpen={host} className="flex flex-col">
           <p className="mb-3 text-sm text-ink/70">{host ? "You're the host. Set the table, then start." : `${hostName} sets the table.`}</p>
 
           <div className="mb-4 rounded-2xl border-[3px] border-ink bg-mist p-3 text-center">
@@ -165,13 +170,12 @@ export function Lobby({
               <p className="rounded-2xl bg-mist p-3 text-center font-display text-lg font-bold">Waiting for {hostName} to start…</p>
             )}
           </div>
-        </section>
+        </Fold>
 
         {/* Chat */}
-        <section className="sticker flex h-[460px] flex-col overflow-hidden lg:h-auto" aria-label="Chat">
-          <h2 className="border-b-[3px] border-ink px-4 py-2 font-display text-2xl font-extrabold">Chat</h2>
-          <Chat messages={chat} me={me} onSend={onChat} mood="lobby" className="flex-1" />
-        </section>
+        <Fold title={`Chat${chat.length ? ` (${chat.length})` : ""}`} flush>
+          <Chat messages={chat} me={me} onSend={onChat} mood="lobby" className="h-[380px] lg:h-full" />
+        </Fold>
       </div>
     </main>
   );
@@ -208,5 +212,39 @@ function Row({
         )}
       </dd>
     </>
+  );
+}
+
+/** A panel that folds up on phones (tap the title) and is always open on wide screens. */
+function Fold({
+  title,
+  defaultOpen = false,
+  flush = false,
+  className = "",
+  children,
+}: {
+  title: string;
+  defaultOpen?: boolean;
+  flush?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className={`sticker overflow-hidden ${flush ? "flex flex-col" : ""}`}>
+      <h2>
+        <button
+          className={`flex w-full items-center justify-between px-4 py-3 text-left font-display text-2xl font-extrabold lg:pointer-events-none ${flush ? "border-b-[3px] border-ink" : ""}`}
+          onClick={() => setOpen((o) => !o)}
+          aria-expanded={open}
+        >
+          {title}
+          <span className={`text-xl transition-transform lg:hidden ${open ? "rotate-180" : ""}`} aria-hidden>
+            ▾
+          </span>
+        </button>
+      </h2>
+      <div className={`${open ? "" : "hidden"} lg:block ${flush ? "min-h-0 flex-1" : `px-4 pb-4 ${className}`}`}>{children}</div>
+    </section>
   );
 }

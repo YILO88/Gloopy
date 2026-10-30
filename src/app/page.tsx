@@ -71,10 +71,10 @@ export default function Home() {
         </h1>
         <div className="mb-1 flex -space-x-3">
           <div className="rotate-[-10deg]">
-            <PlayingCard card="As" size="md" />
+            <PlayingCard card="As" size="board" />
           </div>
           <div className="rotate-[8deg]">
-            <PlayingCard card="Kh" size="md" />
+            <PlayingCard card="Kh" size="board" />
           </div>
         </div>
       </header>
