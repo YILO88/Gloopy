@@ -102,27 +102,30 @@ export function Table(props: {
   }, [g.seats, me]);
 
   // Sticker reactions popping over seats.
-  const mountedAt = useRef(Date.now());
-  const [pops, setPops] = useState<Record<string, { id: number; sticker: string }>>({});
+  // Measured on the server's clock: phone clocks are often seconds off, which used to hide stickers on phones.
+  const mountedAt = useRef(serverNow());
+  const [pops, setPops] = useState<Record<string, { id: number; sticker: string; name: string }>>({});
   const seen = useRef(new Set<number>());
   useEffect(() => {
     for (const m of chat) {
       if (seen.current.has(m.id)) continue;
       seen.current.add(m.id);
-      if (m.kind !== "sticker" || new Date(m.created_at).getTime() < mountedAt.current - 5000) continue;
-      setPops((p) => ({ ...p, [m.sender_id]: { id: m.id, sticker: m.body } }));
+      if (m.kind !== "sticker" || new Date(m.created_at).getTime() < mountedAt.current - 15000) continue;
+      // Watchers have no seat: their stickers pop at the top of the table instead.
+      const key = g.seats.some((s) => s.id === m.sender_id) ? m.sender_id : "watcher";
+      setPops((p) => ({ ...p, [key]: { id: m.id, sticker: m.body, name: m.sender_name } }));
       setTimeout(
         () =>
           setPops((p) => {
-            if (p[m.sender_id]?.id !== m.id) return p;
+            if (p[key]?.id !== m.id) return p;
             const rest = { ...p };
-            delete rest[m.sender_id];
+            delete rest[key];
             return rest;
           }),
         2700,
       );
     }
-  }, [chat]);
+  }, [chat, g.seats]);
 
   const [readCount, setReadCount] = useState(chat.length);
   useEffect(() => {
@@ -258,6 +261,13 @@ export function Table(props: {
                 </div>
               </div>
 
+              {pops.watcher && (
+                <div className="pop pointer-events-none absolute left-1/2 top-[22%] z-20 flex flex-col items-center">
+                  <StickerArt id={pops.watcher.sticker} size={78} />
+                  <span className="mt-1 rounded-full bg-black/55 px-2 text-[10px] text-dim">{pops.watcher.name} (watching)</span>
+                </div>
+              )}
+
               {/* other players around the rim */}
               {ordered.map((s, i) => {
                 if (i === 0 && s.id === me) return null;
@@ -331,7 +341,16 @@ export function Table(props: {
                 Close
               </button>
             </div>
-            <Chat messages={chat} me={me} onSend={props.onChat} mood="table" className="flex-1" />
+            <Chat
+              messages={chat}
+              me={me}
+              onSend={(kind, body) => {
+                props.onChat(kind, body);
+                if (kind !== "text") setChatOpen(false); // show the table so you see your sticker land
+              }}
+              mood="table"
+              className="flex-1"
+            />
           </div>
         </div>
       )}
@@ -429,7 +448,8 @@ function OtherSeat({
       >
         <div className={`relative flex flex-col items-center ${seat.folded || out ? "opacity-60" : ""}`}>
           {pop && (
-            <div className="pop pointer-events-none absolute -top-16 left-1/2 z-20">
+            // Seats along the top pop downward so the sticker isn't hidden under the header.
+            <div className={`pop pointer-events-none absolute left-1/2 z-20 ${y < 30 ? "top-20" : "-top-16"}`}>
               <StickerArt id={pop} size={70} />
             </div>
           )}
