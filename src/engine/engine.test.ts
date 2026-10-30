@@ -410,7 +410,7 @@ describe("bot games (random play)", () => {
       const r = seededRng(seed);
       const n = 2 + Math.floor(r() * 8); // 2..9 players
       const s = settings({
-        startingChips: [1000, 5000][Math.floor(r() * 2)],
+        startingChips: [5000, 20000][Math.floor(r() * 2)],
         blindIntervalSec: [90, 180, 300][Math.floor(r() * 3)],
         endMode: r() < 0.3 ? "timed" : "last",
         timeLimitMin: 30,

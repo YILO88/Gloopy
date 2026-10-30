@@ -18,7 +18,7 @@ import { compareScores, evaluateBest } from "./evaluate";
 
 export interface Settings {
   maxSeats: number; // 2–9
-  startingChips: number; // 1,000 / 5,000 / 10,000
+  startingChips: number; // 5,000 / 10,000 / 20,000
   smallBlind: number; // starting small blind
   bigBlind: number; // starting big blind
   blindIntervalSec: number; // blinds double every 90 / 180 / 300 seconds
@@ -29,7 +29,7 @@ export interface Settings {
 
 export const SETTING_OPTIONS = {
   maxSeats: [2, 3, 4, 5, 6, 7, 8, 9],
-  startingChips: [1000, 5000, 10000],
+  startingChips: [5000, 10000, 20000],
   blinds: [
     [10, 20],
     [25, 50],
