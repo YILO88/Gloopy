@@ -15,6 +15,9 @@ Not building the multi-game infrastructure yet, but don't paint us into a corner
 ## Stack
 Next.js + Tailwind on Vercel, Supabase (database, Realtime, anonymous sign-in). Server-authoritative: browsers only read; every move goes through `src/app/api/`. Secret cards live in `room_secrets` (no read policy) and `hole_cards` (own row only).
 
+## Hosting
+- Supabase is in **eu-north-1 (Stockholm)**; Vercel functions are pinned to **arn1 (Stockholm)** in `vercel.json` so every move stays in one city. If either moves, move the other too.
+
 ## Working rules
 - `npm test` must pass (rule tests + 400 random bot games). `npm run local` runs without Supabase.
 - `/check` on the live site is the card-privacy self-test; keep it passing.
