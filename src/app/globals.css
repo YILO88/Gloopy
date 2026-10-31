@@ -181,3 +181,53 @@ body {
   letter-spacing: 0.02em;
   border-top: 3px solid var(--tag, #888);
 }
+
+/* ------------------------------------------------------------------ card and chip motion */
+/* Dealt: slides out from the middle of the table to where it lands. */
+.card-deal {
+  animation: card-deal 420ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes card-deal {
+  0% { transform: translate(var(--fx), var(--fy)) scale(0.5) rotate(-14deg); opacity: 0; }
+  20% { opacity: 1; }
+  100% { transform: none; opacity: 1; }
+}
+/* Turned over: shows the back, then rotates to the face. */
+.card-flip {
+  animation: card-flip 520ms cubic-bezier(0.45, 0.05, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+.card-flip-late {
+  animation-delay: calc(var(--d, 0ms) + 330ms);
+}
+@keyframes card-flip {
+  0% { transform: rotateY(180deg); }
+  100% { transform: rotateY(0deg); }
+}
+/* Folded: slides into the middle and disappears. */
+.card-muck {
+  animation: card-muck 480ms ease-in forwards;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes card-muck {
+  0% { transform: none; opacity: 1; }
+  100% { transform: translate(var(--fx), var(--fy)) scale(0.5) rotate(10deg); opacity: 0; }
+}
+/* Winner's chips: fly from the pot to the winner's seat. */
+.chip-fly {
+  animation: chip-fly 750ms cubic-bezier(0.3, 0.7, 0.3, 1) forwards;
+  animation-delay: 250ms;
+  opacity: 0;
+}
+@keyframes chip-fly {
+  0% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.8); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-deal, .card-flip, .card-flip-late { animation: none !important; }
+  .card-muck { animation: none !important; opacity: 0; }
+  .chip-fly { display: none; }
+}

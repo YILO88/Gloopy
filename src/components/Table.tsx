@@ -9,7 +9,7 @@ import { Gloop, Face } from "./Gloop";
 import { PlayingCard } from "./PlayingCard";
 import { Chat } from "./Chat";
 import { StickerArt } from "./Sticker";
-import { ChipAmount } from "./Chips";
+import { ChipAmount, ChipStack } from "./Chips";
 import { RulesModal } from "./Rules";
 
 type Game = NonNullable<PublicRoom["game"]>;
@@ -79,6 +79,21 @@ export function Table(props: {
 }) {
   const { room, me, myCards, chat, serverNow, isOnline } = props;
   const isHost = room.hostId === me;
+  // Size of the table, so dealt cards can fly from its centre to each seat.
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 380, h: 640 });
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setBox({ w: e.contentRect.width, h: e.contentRect.height }));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setReady(true), 400);
+    return () => clearTimeout(t);
+  }, []);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [removeOpen, setRemoveOpen] = useState(false);
   const [confirmKick, setConfirmKick] = useState<string | null>(null);
@@ -100,6 +115,22 @@ export function Table(props: {
   const watching = !mySeat || mySeat.status !== "playing";
   const myTurn = g.toAct === me;
   const watchers = room.members.filter((m) => !g.seats.some((s) => s.id === m.id && s.status === "playing")).length;
+
+  // Card sounds: a "thwip" per card dealt at the start of a hand, and per card turned on the board.
+  const heard = useRef({ hand: g.handNumber, board: g.board.length });
+  useEffect(() => {
+    const h = heard.current;
+    if (g.handNumber !== h.hand) {
+      const n = Math.min(10, g.seats.filter((s) => s.inHand).length * 2);
+      for (let k = 0; k < n; k++) sounds.card(k * 110);
+      h.hand = g.handNumber;
+      h.board = 0;
+    }
+    if (g.board.length > h.board) {
+      for (let i = h.board; i < g.board.length; i++) sounds.card((i < 3 ? i * 170 : 0) + 120);
+      h.board = g.board.length;
+    }
+  }, [g.handNumber, g.board.length, g.seats]);
 
   const wasMyTurn = useRef(false);
   useEffect(() => {
@@ -279,7 +310,7 @@ export function Table(props: {
         {/* Table */}
         <div className="relative flex min-w-0 flex-1 flex-col">
           <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 py-2 sm:px-6">
-            <div className="relative aspect-[10/17] h-full max-h-full max-w-full md:aspect-[2/1.08] md:h-auto md:w-full md:max-w-[1100px]">
+            <div ref={tableRef} className="relative aspect-[10/17] h-full max-h-full max-w-full md:aspect-[2/1.08] md:h-auto md:w-full md:max-w-[1100px]">
               {/* rim → felt → betting line */}
               <div className="poker-rim absolute inset-[5%_7%] md:inset-[9%_6%]">
                 <div className="poker-felt absolute inset-[14px] sm:inset-[18px]">
@@ -296,11 +327,14 @@ export function Table(props: {
                   {Array.from({ length: 5 }).map((_, i) =>
                     g.board[i] ? (
                       <PlayingCard
-                        key={i}
+                        key={`${g.handNumber}-${i}`}
                         card={g.board[i]}
                         size="board"
                         glow={winningCards.has(g.board[i])}
                         dim={winningCards.size > 0 && !winningCards.has(g.board[i])}
+                        motion={ready ? "dealflip" : undefined}
+                        delay={i < 3 ? i * 170 : 0}
+                        from={{ x: -30 - (i < 3 ? i : 0) * 56, y: -24 }}
                       />
                     ) : (
                       <div key={i} className="h-[70px] w-[50px] rounded-[7px] border-2 border-dashed border-white/15 sm:h-[90px] sm:w-[64px]" />
@@ -308,6 +342,24 @@ export function Table(props: {
                   )}
                 </div>
               </div>
+
+              {result &&
+                ready &&
+                Object.keys(result.won).map((id) => {
+                  const i = ordered.findIndex((s) => s.id === id);
+                  if (i < 0) return null;
+                  const p = id === me && ordered[0]?.id === me ? { x: 50, y: 90 } : seatPoint(i, ordered.length);
+                  return (
+                    <div
+                      key={`${g.handNumber}-${id}`}
+                      className="chip-fly pointer-events-none absolute left-1/2 top-[40%] z-20"
+                      style={{ ["--tx" as string]: `${((p.x - 50) / 100) * box.w}px`, ["--ty" as string]: `${((p.y - 40) / 100) * box.h}px` }}
+                      aria-hidden
+                    >
+                      <ChipStack count={5} size={22} />
+                    </div>
+                  );
+                })}
 
               {pops.watcher && (
                 <div className="pop pointer-events-none absolute left-1/2 top-[22%] z-20 flex flex-col items-center">
@@ -334,6 +386,10 @@ export function Table(props: {
                     won={result?.won[s.id]}
                     pop={pops[s.id]?.sticker}
                     host={room.hostId === s.id}
+                    ready={ready}
+                    dealIndex={i}
+                    dealCount={ordered.length}
+                    toCentre={{ x: ((50 - p.x) / 100) * box.w, y: ((50 - p.y) / 100) * box.h }}
                   />
                 );
               })}
@@ -352,6 +408,9 @@ export function Table(props: {
                   pending={pending}
                   canShow={!!result && !result.showdown && !!result.won[me] && !result.shown[me]}
                   onShow={props.onShowCards}
+                  ready={ready}
+                  dealCount={ordered.length}
+                  fromCentre={{ x: 0, y: -box.h * 0.4 }}
                 />
               )}
             </div>
@@ -481,10 +540,18 @@ function OtherSeat({
   won,
   pop,
   host,
+  ready,
+  dealIndex,
+  dealCount,
+  toCentre,
 }: {
   seat: PublicSeat;
   x: number;
   y: number;
+  ready: boolean;
+  dealIndex: number;
+  dealCount: number;
+  toCentre: { x: number; y: number };
   g: Game;
   now: number;
   online: boolean;
@@ -526,9 +593,26 @@ function OtherSeat({
             {/* their cards: tucked against the avatar, away from the board */}
             <div className={`absolute flex -space-x-3 ${shown ? "-bottom-2 -right-7" : "-bottom-1 -right-3"} ${x > 55 && !shown ? "!-left-3 !right-auto" : ""}`}>
               {shown
-                ? shown.map((c) => <PlayingCard key={c} card={c} size="sm" glow={!!won} />)
-                : seat.inHand && !seat.folded && !out
-                  ? [0, 1].map((k) => <PlayingCard key={k} size="xs" className={k ? "rotate-6" : "-rotate-6"} />)
+                ? // showdown: their cards turn over
+                  shown.map((c) => <PlayingCard key={`${g.handNumber}-${c}`} card={c} size="sm" glow={!!won} motion={ready ? "flip" : undefined} />)
+                : seat.inHand && !out
+                  ? seat.folded
+                    ? // folded: cards slide into the middle and vanish (nothing to show if we arrived after)
+                      ready &&
+                      [0, 1].map((k) => (
+                        <PlayingCard key={`${g.handNumber}-muck-${k}`} size="xs" className={k ? "rotate-6" : "-rotate-6"} motion="muck" from={toCentre} />
+                      ))
+                    : // dealt one at a time round the table, twice
+                      [0, 1].map((k) => (
+                        <PlayingCard
+                          key={`${g.handNumber}-${k}`}
+                          size="xs"
+                          className={k ? "rotate-6" : "-rotate-6"}
+                          motion={ready ? "deal" : undefined}
+                          delay={(k * dealCount + dealIndex) * 110}
+                          from={toCentre}
+                        />
+                      ))
                   : null}
             </div>
           </div>
@@ -580,6 +664,9 @@ function MySeat({
   pending,
   canShow,
   onShow,
+  ready,
+  dealCount,
+  fromCentre,
 }: {
   seat: PublicSeat;
   g: Game;
@@ -592,6 +679,9 @@ function MySeat({
   pending: string | null;
   canShow: boolean;
   onShow: () => void;
+  ready: boolean;
+  dealCount: number;
+  fromCentre: { x: number; y: number };
 }) {
   const out = seat.status !== "playing";
   const toAct = g.toAct === seat.id && !pending;
@@ -621,9 +711,20 @@ function MySeat({
       <div className={`relative flex items-end ${seat.folded || out ? "opacity-60" : ""}`}>
         <div className="flex gap-1.5">
           {cards.length === 2 ? (
-            cards.map((c) => <PlayingCard key={c} card={c} size="hand" />)
+            // my two cards fly in from the middle and turn face up
+            cards.map((c, k) => (
+              <PlayingCard
+                key={`${g.handNumber}-${c}`}
+                card={c}
+                size="hand"
+                motion={ready ? "dealflip" : undefined}
+                delay={k * dealCount * 110}
+                from={fromCentre}
+              />
+            ))
           ) : seat.inHand && !out ? (
-            [0, 1].map((k) => <PlayingCard key={k} size="hand" />)
+            // waiting for my cards to arrive: keep the space, show nothing yet
+            [0, 1].map((k) => <PlayingCard key={k} size="hand" className="opacity-0" />)
           ) : (
             <div className="h-[84px] w-[126px]" />
           )}

@@ -43,9 +43,33 @@ function tone(freq: number, start: number, dur: number, type: OscillatorType = "
   o.stop(a.currentTime + start + dur + 0.05);
 }
 
+/** A short papery "thwip", like a card sliding across felt. */
+function swish(start = 0, gain = 0.09) {
+  const a = ac();
+  if (!a || muted) return;
+  const len = Math.floor(a.sampleRate * 0.09);
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const f = a.createBiquadFilter();
+  f.type = "bandpass";
+  f.frequency.value = 2600;
+  f.Q.value = 0.8;
+  const g = a.createGain();
+  g.gain.value = gain;
+  src.connect(f).connect(g).connect(a.destination);
+  src.start(a.currentTime + start);
+}
+
 export const sounds = {
   unlock() {
     ac();
+  },
+  /** One card landing. */
+  card(delayMs = 0) {
+    swish(delayMs / 1000);
   },
   yourTurn() {
     tone(880, 0, 0.15, "sine", 0.12);
