@@ -84,6 +84,12 @@ export function Table(props: {
   useEffect(() => setMutedState(isMuted()), []);
 
   const mySeat = g.seats.find((s) => s.id === me);
+  // My move shows instantly while the server confirms it, so the table never feels stuck.
+  const [pending, setPending] = useState<string | null>(null);
+  useEffect(() => setPending(null), [g.toAct, g.handNumber, g.street]);
+  useEffect(() => {
+    if (props.error) setPending(null);
+  }, [props.error]);
   const watching = !mySeat || mySeat.status !== "playing";
   const myTurn = g.toAct === me;
   const watchers = room.members.filter((m) => !g.seats.some((s) => s.id === m.id && s.status === "playing")).length;
@@ -301,12 +307,25 @@ export function Table(props: {
                   won={result?.won[me]}
                   pop={pops[me]?.sticker}
                   host={room.hostId === me}
+                  pending={pending}
                 />
               )}
             </div>
           </div>
 
-          {!watching && mySeat && myTurn && <ActionBar g={g} seat={mySeat} busy={props.busy} onAct={props.onAct} />}
+          {!watching && mySeat && myTurn && !pending && (
+            <ActionBar
+              g={g}
+              seat={mySeat}
+              busy={props.busy}
+              onAct={async (a, label) => {
+                setPending(label);
+                const ok = await props.onAct(a);
+                if (!ok) setPending(null);
+                return ok;
+              }}
+            />
+          )}
           {props.error && (
             <p role="alert" className="mx-3 mb-2 rounded-lg bg-alert/25 px-3 py-1.5 text-center text-sm text-[#ffd2cc]">
               {props.error}
@@ -513,6 +532,7 @@ function MySeat({
   won,
   pop,
   host,
+  pending,
 }: {
   seat: PublicSeat;
   g: Game;
@@ -522,9 +542,10 @@ function MySeat({
   won?: number;
   pop?: string;
   host: boolean;
+  pending: string | null;
 }) {
   const out = seat.status !== "playing";
-  const toAct = g.toAct === seat.id;
+  const toAct = g.toAct === seat.id && !pending;
   return (
     <div className="absolute bottom-[1%] left-1/2 z-10 flex -translate-x-1/2 flex-col items-center md:bottom-[2%]">
       {pop && (
@@ -537,7 +558,7 @@ function MySeat({
           WIN +{won.toLocaleString()}
         </span>
       ) : (
-        !out && !toAct && <Tag action={seat.lastAction} className="mb-1" />
+        !out && !toAct && <Tag action={pending ?? seat.lastAction} className="mb-1" />
       )}
       {/* private: only I see my hand name */}
       {handName && !seat.folded && <div className="mb-1 text-sm font-semibold text-[#ffe08a] drop-shadow">{handName}</div>}
@@ -575,7 +596,17 @@ function MySeat({
 
 // ------------------------------------------------------------------ actions
 
-function ActionBar({ g, seat, busy, onAct }: { g: Game; seat: PublicSeat; busy: boolean; onAct: (a: Action) => Promise<boolean> }) {
+function ActionBar({
+  g,
+  seat,
+  busy,
+  onAct,
+}: {
+  g: Game;
+  seat: PublicSeat;
+  busy: boolean;
+  onAct: (a: Action, label: string) => Promise<boolean>;
+}) {
   const owe = Math.max(0, g.currentBet - seat.bet);
   const toCall = Math.min(owe, seat.chips);
   const maxTo = g.legal?.maxRaiseTo ?? seat.bet + seat.chips;
@@ -601,7 +632,20 @@ function ActionBar({ g, seat, busy, onAct }: { g: Game; seat: PublicSeat; busy: 
   const act = async (a: Action) => {
     sounds.unlock();
     if (a.type !== "fold" && a.type !== "check") sounds.chip();
-    await onAct(a);
+    // Same wording the server uses, so the tag doesn't change when the confirmation lands.
+    const label =
+      a.type === "fold"
+        ? "Fold"
+        : a.type === "check"
+          ? "Check"
+          : a.type === "call"
+            ? toCall >= seat.chips
+              ? "All in"
+              : `Call ${toCall}`
+            : a.type === "allin"
+              ? "All in"
+              : `Raise to ${a.to}`;
+    await onAct(a, label);
   };
 
   return (

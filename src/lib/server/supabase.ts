@@ -59,7 +59,10 @@ export async function userFromRequest(req: Request): Promise<string | null> {
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!token) return null;
   if (process.env.GLOOPY_MEMORY_STORE === "1" && token.startsWith("dev-")) return token.slice(4);
-  const { data, error } = await supabaseAdmin().auth.getUser(token);
-  if (error || !data.user) return null;
-  return data.user.id;
+  // getClaims checks the sign-in token's signature right here on the server (keys are cached),
+  // instead of asking Supabase on every move. Saves a full round trip per request.
+  const { data, error } = await supabaseAdmin().auth.getClaims(token);
+  const sub = data?.claims?.sub;
+  if (error || typeof sub !== "string") return null;
+  return sub;
 }

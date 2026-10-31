@@ -125,7 +125,7 @@ export function useRoom(code: string) {
   useEffect(() => {
     const target = Math.min(deadline ?? Infinity, nextHand ?? Infinity);
     if (!isFinite(target)) return;
-    const wait = Math.max(0, target - serverNow()) + 250 + Math.random() * 400;
+    const wait = Math.max(0, target - serverNow()) + 80 + Math.random() * 150; // small spread so not everyone asks at once
     const t = setTimeout(() => {
       api(`/api/rooms/${code}`, { op: "tick" }).then(accept).catch(() => {});
     }, wait);
