@@ -208,6 +208,8 @@ export function useRoom(code: string) {
     again: () => send({ op: "again" }),
     updateSettings: (settings: Settings) => send({ op: "settings", settings }),
     act: (action: Action) => send({ op: "act", action }),
+    kick: (target: string) => send({ op: "kick", target }),
+    showMyCards: () => send({ op: "show" }),
     sendChat,
   };
 }

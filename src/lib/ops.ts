@@ -4,13 +4,14 @@
  * Pure: easy to test, and the API route just loads → applyOp → saves.
  */
 import { Rng } from "@/engine/cards";
-import { Action, GameError, PublicGame, Settings, act, advance, holeCards, publicView } from "@/engine/game";
+import { Action, GameError, PublicGame, Settings, act, advance, holeCards, publicView, showCards } from "@/engine/game";
 import {
   Member,
   Room,
   backToLobby,
   createRoom,
   joinRoom,
+  kickMember,
   leaveRoom,
   startGame,
   syncPhase,
@@ -25,7 +26,9 @@ export type Op =
   | { op: "start" }
   | { op: "act"; action: Action }
   | { op: "tick" }
-  | { op: "again" };
+  | { op: "again" }
+  | { op: "kick"; target: string }
+  | { op: "show" };
 
 export interface PublicMember {
   id: string;
@@ -46,6 +49,8 @@ export interface PublicRoom {
   gameNumber: number;
   game: PublicGame | null;
   savedAt: number;
+  /** Players the host removed (so their screen can say so). */
+  removed: string[];
 }
 
 // ------------------------------------------------------------------ table expiry
@@ -114,6 +119,15 @@ export function applyOp(room: Room, userId: string, op: Op, now: number, rng: Rn
       requireMember(r, userId);
       r = backToLobby(r);
       break;
+    case "kick":
+      if (typeof op.target !== "string") throw new GameError("Pick a player to remove");
+      r = kickMember(r, userId, op.target, now);
+      break;
+    case "show":
+      requireMember(r, userId);
+      if (!r.game) throw new GameError("No game in progress");
+      r = { ...r, game: showCards(r.game, userId) };
+      break;
     default:
       throw new GameError("Unknown request");
   }
@@ -130,6 +144,7 @@ export function toPublic(room: Room, now: number): PublicRoom {
     gameNumber: room.gameNumber,
     game: room.game ? publicView(room.game) : null,
     savedAt: now,
+    removed: room.removed ?? [],
   };
 }
 

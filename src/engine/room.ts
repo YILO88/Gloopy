@@ -3,7 +3,7 @@
  * Pure functions, like the game engine.
  */
 import { Rng } from "./cards";
-import { Entrant, GameError, GameState, Settings, DEFAULT_SETTINGS, createGame, validateSettings } from "./game";
+import { Entrant, GameError, GameState, Settings, DEFAULT_SETTINGS, createGame, removePlayer, validateSettings } from "./game";
 
 export interface Member extends Entrant {
   joinedAt: number;
@@ -20,6 +20,8 @@ export interface Room {
   phase: "lobby" | "playing" | "results";
   game: GameState | null;
   gameNumber: number;
+  /** Players the host removed: they can't rejoin this table. */
+  removed?: string[];
 }
 
 const clone = <T>(x: T): T => structuredClone(x);
@@ -53,6 +55,7 @@ export function nameTaken(room: Room, name: string, exceptId: string): boolean {
 }
 
 export function joinRoom(room: Room, who: Entrant, now: number): Room {
+  if (room.removed?.includes(who.id)) throw new GameError("The host removed you from this table.");
   if (nameTaken(room, who.name, who.id)) throw new GameError(`"${who.name}" is already at this table. Pick another nickname.`);
   const r = clone(room);
   const existing = r.members.find((m) => m.id === who.id);
@@ -177,4 +180,18 @@ export function makeRoomCode(rng: Rng, length = 5): string {
   let s = "";
   for (let i = 0; i < length; i++) s += alphabet[Math.floor(rng() * alphabet.length)];
   return s;
+}
+
+/** The host removes someone from the table (lobby, game or waiting room). They can't rejoin. */
+export function kickMember(room: Room, by: string, target: string, now: number): Room {
+  if (room.hostId !== by) throw new GameError("Only the host can remove players");
+  if (target === by) throw new GameError("You can't remove yourself. Use Leave instead.");
+  const m = room.members.find((x) => x.id === target);
+  if (!m) throw new GameError("That player isn't at this table");
+  const r = clone(room);
+  if (r.game && r.phase === "playing") r.game = removePlayer(r.game, target, now);
+  r.members = r.members.filter((x) => x.id !== target);
+  r.removed = [...(r.removed ?? []), target];
+  if (r.phase === "lobby" && m.role === "player") promoteWaiting(r);
+  return r;
 }

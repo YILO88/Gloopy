@@ -12,7 +12,7 @@
  * worked out from the game's start time, so nothing needs to tick.
  */
 import { Card, Rng, newDeck, shuffle } from "./cards";
-import { compareScores, evaluateBest } from "./evaluate";
+import { compareScores, describeHand, evaluateBest } from "./evaluate";
 
 // ---------------------------------------------------------------- settings
 
@@ -66,7 +66,7 @@ export function validateSettings(s: Settings): string | null {
 
 /** Pause after a hand so everyone can see what happened, before the next deal. */
 export const PAUSE_AFTER_SHOWDOWN_MS = 3500;
-export const PAUSE_AFTER_FOLD_MS = 1500;
+export const PAUSE_AFTER_FOLD_MS = 2500; // long enough for the winner to tap "Show cards"
 /** Missed turns in a row before a player is removed. */
 export const MAX_STRIKES = 3;
 
@@ -640,6 +640,39 @@ function kickMut(state: GameState, id: string) {
     s.needsAction = false;
     s.lastAction = "Left";
   }
+}
+
+/**
+ * The host removes a player. They fold if they're in a hand, their chips go to the dealer,
+ * and they rank at the bottom ("Left"). The game carries on without them.
+ */
+export function removePlayer(state: GameState, id: string, now: number): GameState {
+  const p = state.players.find((x) => x.id === id);
+  if (state.status !== "playing" || !p || p.status !== "playing") return state;
+  const st = clone(state);
+  const wasToAct = st.hand?.toAct === id;
+  kickMut(st, id);
+  const h = st.hand;
+  if (h && h.street !== "complete") {
+    if (wasToAct) progressMut(st, now, id);
+    else if (inHand(h).length === 1) settleMut(st, now, false);
+  } else if (dealable(st).length < 2) {
+    finishMut(st, now);
+  }
+  return st;
+}
+
+/** A player who won the pot without a showdown chooses to show their cards. */
+export function showCards(state: GameState, id: string): GameState {
+  const h = state.hand;
+  const r = h?.result;
+  if (!h || !r || h.street !== "complete") throw new GameError("You can show your cards once the hand is over");
+  if (r.showdown || r.shown[id]) return state; // already face up
+  if (!r.won[id]) throw new GameError("Only the winner can choose to show");
+  const st = clone(state);
+  const seat = st.hand!.seats[id];
+  st.hand!.result!.shown[id] = { hole: seat.hole, handName: describeHand([...seat.hole, ...st.hand!.board]), bestCards: [] };
+  return st;
 }
 
 /**

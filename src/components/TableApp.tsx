@@ -12,10 +12,24 @@ import { ProfilePicker } from "./ProfilePicker";
 import { Results } from "./Results";
 import { Table } from "./Table";
 
+/** How long the final hand stays on screen before the leaderboard appears. */
+const RESULTS_DELAY_MS = 5000;
+
 export function TableApp({ code }: { code: string }) {
   const router = useRouter();
   const r = useRoom(code);
-  const { room, me } = r;
+  const { room, me, serverNow } = r;
+  // Let everyone see the last hand (board, winner, shown cards) before the leaderboard covers it.
+  const finishedAt = room?.phase === "results" ? room.game?.finishedAt ?? null : null;
+  const [resultsReady, setResultsReady] = useState(false);
+  useEffect(() => {
+    if (finishedAt === null) return setResultsReady(false);
+    const wait = finishedAt + RESULTS_DELAY_MS - serverNow();
+    if (wait <= 0) return setResultsReady(true);
+    setResultsReady(false);
+    const t = setTimeout(() => setResultsReady(true), wait);
+    return () => clearTimeout(t);
+  }, [finishedAt, serverNow]);
 
   const leave = async () => {
     await r.leave();
@@ -42,6 +56,18 @@ export function TableApp({ code }: { code: string }) {
       </Centered>
     );
 
+  if (room.removed?.includes(me))
+    return (
+      <Centered>
+        <Gloop id="sky" face="sad" size={100} />
+        <h1 className="font-display text-3xl font-extrabold">You were removed</h1>
+        <p>The host removed you from table {code}.</p>
+        <Link href="/" className="btn mt-2 inline-block bg-lime px-5 py-2 text-xl">
+          Back to start
+        </Link>
+      </Centered>
+    );
+
   const member = room.members.find((m) => m.id === me);
   if (!member) return <JoinScreen room={room} busy={r.busy} error={r.error} onJoin={r.join} />;
 
@@ -59,6 +85,7 @@ export function TableApp({ code }: { code: string }) {
         onLeave={leave}
         onSettings={r.updateSettings}
         onChat={r.sendChat}
+        onKick={r.kick}
       />
     );
 
@@ -75,8 +102,10 @@ export function TableApp({ code }: { code: string }) {
       onAct={r.act}
       onChat={r.sendChat}
       onLeave={leave}
+      onKick={r.kick}
+      onShowCards={r.showMyCards}
     >
-      {room.phase === "results" && <Results room={room} me={me} busy={r.busy} chat={r.chat} onChat={r.sendChat} onAgain={r.again} onLeave={leave} />}
+      {room.phase === "results" && resultsReady && <Results room={room} me={me} busy={r.busy} chat={r.chat} onChat={r.sendChat} onAgain={r.again} onLeave={leave} />}
     </Table>
   );
 }

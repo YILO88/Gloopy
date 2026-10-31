@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { DEFAULT_SETTINGS, SETTING_OPTIONS, Settings } from "@/engine/game";
 import type { PublicRoom } from "@/lib/ops";
 import type { ChatMessage } from "@/lib/client/useRoom";
@@ -17,6 +17,7 @@ export function Lobby({
   onLeave,
   onSettings,
   onChat,
+  onKick,
 }: {
   room: PublicRoom;
   me: string;
@@ -26,6 +27,7 @@ export function Lobby({
   onLeave: () => void;
   onSettings: (s: Settings) => void;
   onChat: (kind: ChatMessage["kind"], body: string) => void;
+  onKick: (id: string) => void;
 }) {
   const host = room.hostId === me;
   const players = room.members.filter((m) => m.role === "player").sort((a, b) => a.joinedAt - b.joinedAt);
@@ -81,6 +83,7 @@ export function Lobby({
                     👑
                   </span>
                 )}
+                {host && m.id !== me && <RemoveButton name={m.name} onConfirm={() => onKick(m.id)} />}
               </li>
             ))}
             {Array.from({ length: Math.max(0, s.maxSeats - players.length) }).map((_, i) => (
@@ -103,7 +106,8 @@ export function Lobby({
                   <li key={m.id} className="flex items-center gap-2">
                     <span className="w-5 text-right font-bold">{i + 1}.</span>
                     <Gloop id={m.avatar} size={26} />
-                    <span className="truncate">{m.name}</span>
+                    <span className="flex-1 truncate">{m.name}</span>
+                    {host && <RemoveButton name={m.name} onConfirm={() => onKick(m.id)} />}
                   </li>
                 ))}
               </ol>
@@ -174,7 +178,7 @@ export function Lobby({
 
         {/* Chat */}
         <Fold title={`Chat${chat.length ? ` (${chat.length})` : ""}`} flush>
-          <Chat messages={chat} me={me} onSend={onChat} mood="lobby" className="h-[380px] lg:h-full" />
+          <Chat messages={chat} me={me} onSend={onChat} mood="lobby" className="h-[380px] lg:h-[520px]" />
         </Fold>
       </div>
     </main>
@@ -246,5 +250,29 @@ function Fold({
       </h2>
       <div className={`${open ? "" : "hidden"} lg:block ${flush ? "min-h-0 flex-1" : `px-4 pb-4 ${className}`}`}>{children}</div>
     </section>
+  );
+}
+
+/** Host-only "remove" button. First tap asks, second tap confirms. */
+function RemoveButton({ name, onConfirm }: { name: string; onConfirm: () => void }) {
+  const [sure, setSure] = useState(false);
+  useEffect(() => {
+    if (!sure) return;
+    const t = setTimeout(() => setSure(false), 3000);
+    return () => clearTimeout(t);
+  }, [sure]);
+  return sure ? (
+    <button className="rounded-full border-2 border-ink bg-[#ff5b5b] px-2 py-0.5 text-xs font-bold text-white" onClick={onConfirm}>
+      Remove?
+    </button>
+  ) : (
+    <button
+      className="grid h-7 w-7 place-items-center rounded-full border-2 border-ink/30 text-sm font-bold text-ink/60 hover:border-ink hover:text-ink"
+      onClick={() => setSure(true)}
+      aria-label={`Remove ${name} from the table`}
+      title={`Remove ${name}`}
+    >
+      ✕
+    </button>
   );
 }

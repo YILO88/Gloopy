@@ -9,7 +9,7 @@ import { getStore, userFromRequest } from "@/lib/server/supabase";
 
 export const dynamic = "force-dynamic";
 
-const OPS = new Set(["join", "leave", "settings", "start", "act", "tick", "again"]);
+const OPS = new Set(["join", "leave", "settings", "start", "act", "tick", "again", "kick", "show"]);
 
 export async function POST(req: Request, ctx: { params: Promise<{ code: string }> }) {
   try {

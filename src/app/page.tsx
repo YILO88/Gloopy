@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ProfilePicker } from "@/components/ProfilePicker";
 import { Gloop } from "@/components/Gloop";
 import { PlayingCard } from "@/components/PlayingCard";
+import { RulesButton } from "@/components/Rules";
 import { GLOOPS } from "@/lib/gloops";
 import { api, loadProfile, saveProfile } from "@/lib/client/api";
 import { sounds } from "@/lib/client/sound";
@@ -111,9 +112,12 @@ export default function Home() {
         </section>
 
         <section className="sticker flex flex-col p-5 sm:p-6" aria-labelledby="how">
-          <h2 id="how" className="font-display text-2xl font-extrabold">
-            How it works
-          </h2>
+          <div className="flex items-center justify-between gap-2">
+            <h2 id="how" className="font-display text-2xl font-extrabold">
+              How it works
+            </h2>
+            <RulesButton label="Rules and winning hands" />
+          </div>
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-4 text-center">
             <Gloop id={h.gloop} face={h.face} size={96} />
             <h3 className="font-display text-xl font-extrabold">

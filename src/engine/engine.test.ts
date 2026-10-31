@@ -14,10 +14,12 @@ import {
   legalActions,
   publicView,
   skipDisconnected,
+  removePlayer,
+  showCards,
   totalChips,
   HandSeat,
 } from "./game";
-import { backToLobby, createRoom, joinRoom, leaveRoom, startGame, syncPhase, updateSettings, waitingQueue } from "./room";
+import { backToLobby, createRoom, joinRoom, kickMember, leaveRoom, startGame, syncPhase, updateSettings, waitingQueue } from "./room";
 
 const rng = seededRng(42);
 const P = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, avatar: "lime" }));
@@ -452,5 +454,82 @@ describe("bot games (random play)", () => {
       expect(g.ranking!.length).toBe(n);
       expect(g.ranking![0].position).toBe(1);
     }
+  });
+});
+
+// ------------------------------------------------------------------ host removes a player
+
+describe("host removes a player", () => {
+  const E = (id: string) => ({ id, name: id, avatar: "lime" });
+
+  it("removing the player whose turn it is moves the turn on; chips are kept safe", () => {
+    let g = createGame(settings(), P(3), T0, rng);
+    const total = totalChips(g);
+    expect(g.hand!.toAct).toBe("p0");
+    g = removePlayer(g, "p0", T0 + 1000);
+    expect(g.players[0].status).toBe("kicked");
+    expect(g.hand!.toAct).toBe("p1");
+    expect(totalChips(g)).toBe(total);
+  });
+
+  it("removing someone else mid-hand ends the hand if only one player is left in it", () => {
+    let g = createGame(settings(), P(3), T0, rng);
+    g = act(g, "p0", { type: "fold" }, T0);
+    g = removePlayer(g, "p2", T0 + 10); // p1 is to act; p2 removed
+    expect(g.hand!.street).toBe("complete");
+    expect(g.hand!.result!.won.p1).toBeGreaterThan(0); // p1 takes the pot
+    expect(g.status).toBe("playing"); // p0 still has chips, so the game carries on
+    expect(g.players.find((p) => p.id === "p2")!.status).toBe("kicked");
+  });
+
+  it("only the host can remove, and removed players can't rejoin", () => {
+    let r = createRoom("ABCDE", E("host"), T0);
+    r = joinRoom(r, E("a"), T0 + 1);
+    r = joinRoom(r, E("b"), T0 + 2);
+    expect(() => kickMember(r, "a", "b", T0)).toThrow(/Only the host/);
+    expect(() => kickMember(r, "host", "host", T0)).toThrow(/yourself/);
+    r = kickMember(r, "host", "b", T0 + 3);
+    expect(r.members.map((m) => m.id)).toEqual(["host", "a"]);
+    expect(() => joinRoom(r, E("b"), T0 + 4)).toThrow(/removed you/);
+  });
+
+  it("random games with the host removing players: chips are never created or lost", () => {
+    for (let seed = 1; seed <= 150; seed++) {
+      const r = seededRng(1000 + seed);
+      const n = 3 + Math.floor(r() * 7);
+      let now = T0;
+      let g = createGame(settings(), P(n), now, r);
+      const total = totalChips(g);
+      for (let step = 0; step < 20000 && g.status === "playing"; step++) {
+        now += 1000;
+        if (r() < 0.01) {
+          const victims = g.players.filter((p) => p.status === "playing");
+          g = removePlayer(g, victims[Math.floor(r() * victims.length)].id, now);
+        } else if (g.hand?.toAct && r() < 0.95) {
+          const legal = legalActions(g, g.hand.toAct);
+          g = act(g, g.hand.toAct, r() < 0.5 ? { type: legal.canCheck ? "check" : "call" } : r() < 0.6 ? { type: "fold" } : { type: "allin" }, now);
+        } else {
+          now = Math.max(now, g.hand?.deadline ?? g.nextHandAt ?? now);
+          g = advance(g, now, r);
+        }
+        expect(totalChips(g)).toBe(total);
+      }
+      expect(g.status).toBe("finished");
+    }
+  });
+});
+
+describe("showing cards after winning without a showdown", () => {
+  it("the winner can show; nobody else can; cards stay hidden otherwise", () => {
+    let g = createGame(settings(), P(3), T0, rng);
+    g = act(g, "p0", { type: "fold" }, T0);
+    g = act(g, "p1", { type: "fold" }, T0);
+    const r = g.hand!.result!;
+    expect(r.showdown).toBe(false);
+    expect(r.shown.p2).toBeUndefined();
+    expect(() => showCards(g, "p1")).toThrow(/Only the winner/);
+    g = showCards(g, "p2");
+    expect(g.hand!.result!.shown.p2.hole).toEqual(g.hand!.seats.p2.hole);
+    expect(JSON.stringify(publicView(g))).toContain(g.hand!.seats.p2.hole[0]);
   });
 });

@@ -10,6 +10,7 @@ import { PlayingCard } from "./PlayingCard";
 import { Chat } from "./Chat";
 import { StickerArt } from "./Sticker";
 import { ChipAmount } from "./Chips";
+import { RulesModal } from "./Rules";
 
 type Game = NonNullable<PublicRoom["game"]>;
 
@@ -72,9 +73,15 @@ export function Table(props: {
   onAct: (a: Action) => Promise<boolean>;
   onChat: (kind: ChatMessage["kind"], body: string) => void;
   onLeave: () => void;
+  onKick: (id: string) => void;
+  onShowCards: () => void;
   children?: React.ReactNode; // results overlay
 }) {
   const { room, me, myCards, chat, serverNow, isOnline } = props;
+  const isHost = room.hostId === me;
+  const [rulesOpen, setRulesOpen] = useState(false);
+  const [removeOpen, setRemoveOpen] = useState(false);
+  const [confirmKick, setConfirmKick] = useState<string | null>(null);
   const g = room.game!;
   const now = useNow(250, serverNow);
   const [chatOpen, setChatOpen] = useState(false);
@@ -211,6 +218,41 @@ export function Table(props: {
               >
                 {muted ? "Turn sound on" : "Turn sound off"}
               </button>
+              <button
+                className="block w-full px-4 py-2.5 text-left hover:bg-white/10"
+                onClick={() => {
+                  setRulesOpen(true);
+                  setMenuOpen(false);
+                }}
+              >
+                Rules and winning hands
+              </button>
+              {isHost && room.members.length > 1 && (
+                <>
+                  <button className="block w-full px-4 py-2.5 text-left hover:bg-white/10" onClick={() => setRemoveOpen((o) => !o)} aria-expanded={removeOpen}>
+                    Remove a player {removeOpen ? "▴" : "▾"}
+                  </button>
+                  {removeOpen &&
+                    room.members
+                      .filter((m) => m.id !== me)
+                      .map((m) => (
+                        <button
+                          key={m.id}
+                          className={`flex w-full items-center justify-between px-6 py-2 text-left ${confirmKick === m.id ? "bg-[#5a2026] text-white" : "text-dim hover:bg-white/10"}`}
+                          onClick={() => {
+                            if (confirmKick === m.id) {
+                              props.onKick(m.id);
+                              setConfirmKick(null);
+                              setMenuOpen(false);
+                            } else setConfirmKick(m.id);
+                          }}
+                        >
+                          <span className="truncate">{m.name}</span>
+                          <span className="text-xs">{confirmKick === m.id ? "Tap to confirm" : "Remove"}</span>
+                        </button>
+                      ))}
+                </>
+              )}
               <button className="block w-full px-4 py-2.5 text-left text-[#ff9a8f] hover:bg-white/10" onClick={props.onLeave}>
                 Leave table
               </button>
@@ -308,6 +350,8 @@ export function Table(props: {
                   pop={pops[me]?.sticker}
                   host={room.hostId === me}
                   pending={pending}
+                  canShow={!!result && !result.showdown && !!result.won[me] && !result.shown[me]}
+                  onShow={props.onShowCards}
                 />
               )}
             </div>
@@ -375,6 +419,7 @@ export function Table(props: {
       )}
 
       {menuOpen && <div className="fixed inset-0 z-10" onClick={() => setMenuOpen(false)} />}
+      {rulesOpen && <RulesModal onClose={() => setRulesOpen(false)} />}
       {props.children}
     </div>
   );
@@ -533,6 +578,8 @@ function MySeat({
   pop,
   host,
   pending,
+  canShow,
+  onShow,
 }: {
   seat: PublicSeat;
   g: Game;
@@ -543,6 +590,8 @@ function MySeat({
   pop?: string;
   host: boolean;
   pending: string | null;
+  canShow: boolean;
+  onShow: () => void;
 }) {
   const out = seat.status !== "playing";
   const toAct = g.toAct === seat.id && !pending;
@@ -559,6 +608,12 @@ function MySeat({
         </span>
       ) : (
         !out && !toAct && <Tag action={pending ?? seat.lastAction} className="mb-1" />
+      )}
+      {/* won without a showdown: I choose whether everyone sees my cards */}
+      {canShow && (
+        <button onClick={onShow} className="action-tag mb-1 px-3 py-1 text-xs" style={{ ["--tag" as string]: "#3ddc84" }}>
+          SHOW MY CARDS
+        </button>
       )}
       {/* private: only I see my hand name */}
       {handName && !seat.folded && <div className="mb-1 text-sm font-semibold text-[#ffe08a] drop-shadow">{handName}</div>}
