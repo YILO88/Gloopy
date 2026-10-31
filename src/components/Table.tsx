@@ -622,10 +622,10 @@ function ActionBar({
 
   const clamp = (v: number) => Math.max(minTo, Math.min(maxTo, Math.round(v)));
   const potAfterCall = g.pot + toCall;
-  const presets: [string, number][] = [
+  // Three simple choices, each showing exactly how much it is.
+  const quick: [string, number][] = [
     ["Min", minTo],
-    ["½ pot", g.currentBet + Math.floor(potAfterCall / 2)],
-    ["Pot", g.currentBet + potAfterCall],
+    ["Pot", clamp(g.currentBet + potAfterCall)],
     ["All in", maxTo],
   ];
   const betWord = g.currentBet === 0 ? "BET" : "RAISE";
@@ -648,57 +648,75 @@ function ActionBar({
     await onAct(a, label);
   };
 
-  return (
-    <div className="bg-black/50 px-3 pb-3 pt-2">
-      {open && canRaise && (
-        <div className="mb-3">
-          <div className="mb-3 flex justify-center gap-2">
-            {presets.map(([label, v]) => {
-              const val = clamp(v);
-              const active = to === val;
-              return (
-                <button
-                  key={label}
-                  onClick={() => setTo(val)}
-                  className={`grid h-14 w-14 place-items-center rounded-full border-[3px] border-dashed text-[11px] font-bold leading-tight transition ${
-                    active ? "border-white bg-[#8e4ec6] text-white" : "border-white/50 bg-[#2b2140] text-white/85"
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-2">
-            <button className="tbtn bg-white/10 px-3 py-1.5 text-lg" onClick={() => setTo(clamp(to - step))} aria-label="Less">
+  const confirm = () => act(to >= maxTo ? { type: "allin" } : { type: "raise", to });
+
+  if (open && canRaise) {
+    return (
+      <div className="bg-black/55 px-3 pb-3 pt-3">
+        <div className="mb-3 rounded-2xl bg-black/35 p-3">
+          <div className="flex items-center justify-between">
+            <button
+              className="grid h-12 w-12 place-items-center rounded-full bg-white/10 text-2xl disabled:opacity-30"
+              onClick={() => setTo(clamp(to - step))}
+              disabled={to <= minTo}
+              aria-label="Less"
+            >
               −
             </button>
-            <input
-              type="range"
-              min={minTo}
-              max={maxTo}
-              step={step}
-              value={to}
-              onChange={(e) => setTo(clamp(+e.target.value))}
-              className="flex-1 accent-[#8e4ec6]"
-              aria-label="Raise amount"
-            />
-            <button className="tbtn bg-white/10 px-3 py-1.5 text-lg" onClick={() => setTo(clamp(to + step))} aria-label="More">
+            <div className="text-center">
+              <div className="text-xs text-dim">{to >= maxTo ? "All in" : betWord === "BET" ? "Bet" : "Raise to"}</div>
+              <div className="text-3xl font-bold text-white tabular">{to.toLocaleString()}</div>
+            </div>
+            <button
+              className="grid h-12 w-12 place-items-center rounded-full bg-white/10 text-2xl disabled:opacity-30"
+              onClick={() => setTo(clamp(to + step))}
+              disabled={to >= maxTo}
+              aria-label="More"
+            >
               +
             </button>
           </div>
+          <input
+            type="range"
+            min={minTo}
+            max={maxTo}
+            step={step}
+            value={to}
+            onChange={(e) => setTo(clamp(+e.target.value))}
+            className="mt-3 w-full accent-[#8e4ec6]"
+            aria-label="Amount"
+          />
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {quick.map(([label, v]) => (
+              <button
+                key={label}
+                onClick={() => setTo(v)}
+                className={`rounded-xl py-1.5 text-center transition ${to === v ? "bg-[#8e4ec6] text-white" : "bg-white/10 text-white/85"}`}
+              >
+                <div className="text-xs font-semibold">{label}</div>
+                <div className="text-[11px] opacity-80 tabular">{v.toLocaleString()}</div>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
-      <div className="grid grid-cols-3 gap-2">
-        {open ? (
+        <div className="grid grid-cols-3 gap-2">
           <button className="tbtn bg-white/10 text-white" onClick={() => setOpen(false)}>
-            Back
+            Cancel
           </button>
-        ) : (
-          <button className="tbtn bg-[#5a2026] text-white" disabled={busy} onClick={() => act({ type: "fold" })}>
-            FOLD
+          <button className="tbtn col-span-2 bg-[#8e4ec6] text-white tabular" disabled={busy} onClick={confirm}>
+            {to >= maxTo ? "ALL IN" : `${betWord} ${to.toLocaleString()}`}
           </button>
-        )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-black/50 px-3 pb-3 pt-2">
+      <div className="grid grid-cols-3 gap-2">
+        <button className="tbtn bg-[#5a2026] text-white" disabled={busy} onClick={() => act({ type: "fold" })}>
+          FOLD
+        </button>
         {owe === 0 ? (
           <button className="tbtn bg-[#1f7a4d] text-white" disabled={busy} onClick={() => act({ type: "check" })}>
             CHECK
@@ -708,25 +726,9 @@ function ActionBar({
             {toCall >= seat.chips ? "ALL IN" : `CALL ${toCall.toLocaleString()}`}
           </button>
         )}
-        {canRaise ? (
-          open ? (
-            <button
-              className="tbtn bg-[#8e4ec6] text-white tabular"
-              disabled={busy}
-              onClick={() => act(to >= maxTo ? { type: "allin" } : { type: "raise", to })}
-            >
-              {to >= maxTo ? "ALL IN" : `${betWord} ${to.toLocaleString()}`}
-            </button>
-          ) : (
-            <button className="tbtn bg-[#8e4ec6] text-white" disabled={busy} onClick={() => setOpen(true)}>
-              {betWord}
-            </button>
-          )
-        ) : (
-          <button className="tbtn bg-white/5 text-white/40" disabled>
-            {betWord}
-          </button>
-        )}
+        <button className="tbtn bg-[#8e4ec6] text-white disabled:bg-white/5 disabled:text-white/40" disabled={busy || !canRaise} onClick={() => setOpen(true)}>
+          {betWord}
+        </button>
       </div>
     </div>
   );

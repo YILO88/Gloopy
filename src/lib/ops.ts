@@ -48,6 +48,21 @@ export interface PublicRoom {
   savedAt: number;
 }
 
+// ------------------------------------------------------------------ table expiry
+
+/** A table nobody has touched for this long closes. */
+export const IDLE_LIMIT_MS = 24 * 60 * 60 * 1000;
+/** After a game ends, the table stays open this long for results, chat and Play again. */
+export const FINISHED_LIMIT_MS = 15 * 60 * 1000;
+
+/** Should this table's link stop working? */
+export function isExpired(room: Room, lastActive: number, now: number): boolean {
+  if (room.members.length === 0) return true;
+  if (now - lastActive > IDLE_LIMIT_MS) return true;
+  if (room.phase === "results" && now - lastActive > FINISHED_LIMIT_MS) return true;
+  return false;
+}
+
 export function cleanName(name: unknown): string {
   if (typeof name !== "string") throw new GameError("Pick a nickname");
   const n = name.replace(/\s+/g, " ").trim().slice(0, 16);

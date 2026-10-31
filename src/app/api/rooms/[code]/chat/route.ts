@@ -4,7 +4,7 @@
 import { GameError } from "@/engine/game";
 import { isGif, isSticker } from "@/lib/gloops";
 import { errorResponse, json, readJson } from "@/lib/server/http";
-import { MemoryStore, NotFoundError } from "@/lib/server/store";
+import { MemoryStore, loadLive } from "@/lib/server/store";
 import { getStore, supabaseAdmin, userFromRequest } from "@/lib/server/supabase";
 
 export const dynamic = "force-dynamic";
@@ -26,8 +26,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ code: string }
     else throw new GameError("That message can't be sent");
 
     const store = getStore();
-    const loaded = await store.load(code);
-    if (!loaded) throw new NotFoundError();
+    const loaded = await loadLive(store, code);
     const me = loaded.room.members.find((m) => m.id === userId);
     if (!me) throw new GameError("Join the table to chat");
     const seat = loaded.room.game?.players.find((p) => p.id === userId);

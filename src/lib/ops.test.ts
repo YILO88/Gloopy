@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/engine/cards";
-import { applyOp, newRoom, toPublic } from "./ops";
-import { MemoryStore, mutateRoom } from "./server/store";
+import { FINISHED_LIMIT_MS, IDLE_LIMIT_MS, applyOp, isExpired, newRoom, toPublic } from "./ops";
+import { MemoryStore, loadLive, mutateRoom } from "./server/store";
 
 const rng = seededRng(7);
 const T0 = 2_000_000;
@@ -56,7 +56,7 @@ describe("room operations through the store", () => {
       // Someone else's join lands between our load and save.
       const cur = store.rooms.get(code)!;
       const other = applyOp(cur.room, "sneaky", { op: "join", name: "Sneaky", avatar: "sky" }, T0 + 50, rng);
-      store.rooms.set(code, { room: other, version: cur.version + 1, pub: toPublic(other, T0 + 50) });
+      store.rooms.set(code, { room: other, version: cur.version + 1, pub: toPublic(other, T0 + 50), updatedAt: Date.now() });
     };
     const { pub } = await mutateRoom(store, "GLOOP", (r, now) => applyOp(r, "late", { op: "join", name: "Late", avatar: "sun" }, now, rng), () => T0 + 60);
     expect(pub.members.map((m) => m.id)).toEqual(["u0", "u1", "sneaky", "late"]);
@@ -99,5 +99,30 @@ describe("room operations through the store", () => {
     ({ room } = await mutateRoom(store, "GLOOP", (r, now) => applyOp(r, "u3", { op: "again" }, now, rng), () => t + 1));
     expect(room.phase).toBe("lobby");
     expect(room.game).toBeNull();
+  });
+
+  it("tables expire: idle 24 hours, 15 minutes after a game ends, or once everyone has left", async () => {
+    const room = newRoom("OLDIE", "u0", "Host", "lime", T0);
+    expect(isExpired(room, T0, T0 + IDLE_LIMIT_MS - 1)).toBe(false);
+    expect(isExpired(room, T0, T0 + IDLE_LIMIT_MS + 1)).toBe(true);
+    const finished = { ...room, phase: "results" as const };
+    expect(isExpired(finished, T0, T0 + FINISHED_LIMIT_MS - 1)).toBe(false);
+    expect(isExpired(finished, T0, T0 + FINISHED_LIMIT_MS + 1)).toBe(true);
+    expect(isExpired({ ...room, members: [] }, T0, T0)).toBe(true);
+
+    // An expired table is deleted on the next visit, and its link stops working.
+    const store = new MemoryStore();
+    await store.create("OLDIE", room, toPublic(room, T0));
+    store.rooms.get("OLDIE")!.updatedAt = Date.now() - IDLE_LIMIT_MS - 1000;
+    await expect(loadLive(store, "OLDIE")).rejects.toThrow(/expired/);
+    expect(store.rooms.has("OLDIE")).toBe(false);
+  });
+
+  it("the table closes as soon as the last person leaves the lobby", async () => {
+    const store = await setup(2);
+    await mutateRoom(store, "GLOOP", (r, now) => applyOp(r, "u1", { op: "leave" }, now, rng), () => T0 + 10);
+    expect(store.rooms.has("GLOOP")).toBe(true);
+    await mutateRoom(store, "GLOOP", (r, now) => applyOp(r, "u0", { op: "leave" }, now, rng), () => T0 + 20);
+    expect(store.rooms.has("GLOOP")).toBe(false);
   });
 });

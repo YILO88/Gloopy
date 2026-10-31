@@ -88,6 +88,7 @@ export function useRoom(code: string) {
       .channel(`room:${code}`, { config: { presence: { key: me } } })
       .on("presence", { event: "sync" }, () => setOnline(new Set(Object.keys(ch.presenceState()))))
       .on("postgres_changes", { event: "*", schema: "public", table: "rooms", filter: `code=eq.${code}` }, (p) => {
+        if (p.eventType === "DELETE") return setNotFound(true); // table closed
         const state = (p.new as { state?: PublicRoom }).state;
         if (!state) return;
         const cur = roomRef.current;
@@ -106,6 +107,28 @@ export function useRoom(code: string) {
       .subscribe((status) => {
         if (status === "SUBSCRIBED") void ch.track({ at: Date.now() });
       });
+    // Fast lane: the game server pushes each new state, and my new cards, the moment it saves.
+    // These channels are private: only the server can send on them (see migration 0002).
+    const takeState = (state: PublicRoom) => {
+      const cur = roomRef.current;
+      if (!cur || state.savedAt >= cur.savedAt) {
+        roomRef.current = state;
+        setRoom(state);
+      }
+    };
+    const fast = sb
+      .channel(`game:${code}`, { config: { private: true } })
+      .on("broadcast", { event: "state" }, ({ payload }) => takeState(payload as PublicRoom))
+      .on("broadcast", { event: "closed" }, () => setNotFound(true))
+      .subscribe();
+    const mine = sb
+      .channel(`cards:${me}`, { config: { private: true } })
+      .on("broadcast", { event: "cards" }, ({ payload }) => {
+        const c = payload as { room_code: string; hand_number: number; cards: string[] };
+        if (c.room_code === code) setCards({ hand: c.hand_number, cards: c.cards });
+      })
+      .subscribe();
+
     // If the phone was asleep, catch up when it wakes.
     const wake = () => {
       if (document.visibilityState === "visible") api(`/api/rooms/${code}`).then(accept).catch(() => {});
@@ -115,6 +138,8 @@ export function useRoom(code: string) {
       cancelled = true;
       document.removeEventListener("visibilitychange", wake);
       sb.removeChannel(ch);
+      sb.removeChannel(fast);
+      sb.removeChannel(mine);
     };
   }, [me, code, accept]);
 

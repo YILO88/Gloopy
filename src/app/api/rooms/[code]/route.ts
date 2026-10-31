@@ -4,7 +4,7 @@ import { secureRng } from "@/engine/cards";
 import { holeCards } from "@/engine/game";
 import { Op, applyOp, toPublic } from "@/lib/ops";
 import { errorResponse, json, readJson } from "@/lib/server/http";
-import { NotFoundError, mutateRoom } from "@/lib/server/store";
+import { loadLive, mutateRoom } from "@/lib/server/store";
 import { getStore, userFromRequest } from "@/lib/server/supabase";
 
 export const dynamic = "force-dynamic";
@@ -32,8 +32,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ code: string }>
     const code = raw.toUpperCase();
     const userId = await userFromRequest(req);
     if (!userId) return json({ error: "Please reload the page to sign in" }, 401);
-    const loaded = await getStore().load(code);
-    if (!loaded) throw new NotFoundError();
+    const loaded = await loadLive(getStore(), code);
     const now = Date.now();
     return json({
       room: toPublic(loaded.room, now),

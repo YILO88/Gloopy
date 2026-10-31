@@ -21,9 +21,11 @@ export class SupabaseStore implements RoomStore {
   constructor(private db: SupabaseClient) {}
 
   async load(code: string) {
-    const { data, error } = await this.db.from("room_secrets").select("room, version").eq("code", code).maybeSingle();
+    const { data, error } = await this.db.from("room_secrets").select("room, version, updated_at").eq("code", code).maybeSingle();
     if (error) throw error;
-    return data ? { room: data.room as Room, version: data.version as number } : null;
+    return data
+      ? { room: data.room as Room, version: data.version as number, updatedAt: Date.parse(data.updated_at as string) }
+      : null;
   }
 
   async create(code: string, room: Room, pub: PublicRoom) {
@@ -41,7 +43,36 @@ export class SupabaseStore implements RoomStore {
       p_holes: holes,
     });
     if (error) throw error;
-    return data === true;
+    if (data !== true) return false;
+    // Push the new state straight to every screen (faster than waiting for the database to
+    // announce the change), and each player's new cards to that player alone.
+    await this.broadcast(code, pub, holes);
+    return true;
+  }
+
+  async remove(code: string) {
+    // Deleting the table also deletes its cards and chat (they're linked to it).
+    const { error } = await this.db.from("rooms").delete().eq("code", code);
+    if (error) throw error;
+    await this.send(`game:${code}`, "closed", { code });
+  }
+
+  private async broadcast(code: string, pub: PublicRoom, holes: ReturnType<typeof newHoles>) {
+    const sends = [this.send(`game:${code}`, "state", pub)];
+    for (const h of holes ?? []) sends.push(this.send(`cards:${h.player_id}`, "cards", { room_code: code, ...h }));
+    await Promise.allSettled(sends);
+  }
+
+  /** Send on a private channel. Only the server can send; players can only listen (see 0002 migration). */
+  private async send(topic: string, event: string, payload: unknown) {
+    const ch = this.db.channel(topic, { config: { private: true } });
+    try {
+      await ch.httpSend(event, payload, { timeout: 2000 });
+    } catch {
+      // Live push is a speed-up only: the database change still reaches everyone.
+    } finally {
+      await this.db.removeChannel(ch);
+    }
   }
 }
 

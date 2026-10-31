@@ -1,11 +1,30 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PublicRoom } from "@/lib/ops";
 import { sounds } from "@/lib/client/sound";
+import type { ChatMessage } from "@/lib/client/useRoom";
 import { Gloop } from "./Gloop";
+import { Chat } from "./Chat";
 
 /** End of game: winner sees "You won"; everyone gets the leaderboard and a sound. */
-export function Results({ room, me, busy, onAgain, onLeave }: { room: PublicRoom; me: string; busy: boolean; onAgain: () => void; onLeave: () => void }) {
+export function Results({
+  room,
+  me,
+  busy,
+  chat,
+  onChat,
+  onAgain,
+  onLeave,
+}: {
+  room: PublicRoom;
+  me: string;
+  busy: boolean;
+  chat: ChatMessage[];
+  onChat: (kind: ChatMessage["kind"], body: string) => void;
+  onAgain: () => void;
+  onLeave: () => void;
+}) {
+  const [tab, setTab] = useState<"board" | "chat">("board");
   const ranking = room.game?.ranking ?? [];
   const mine = ranking.find((r) => r.id === me);
   const iWon = mine?.position === 1;
@@ -19,8 +38,8 @@ export function Results({ room, me, busy, onAgain, onLeave }: { room: PublicRoom
   }, [iWon, played]);
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="results-h">
-      <div className="sticker w-full max-w-md p-5 text-ink">
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-labelledby="results-h">
+      <div className="sticker flex max-h-[92dvh] w-full min-w-0 max-w-md flex-col p-5 text-ink">
         {iWon ? (
           <div className="mb-3 flex flex-col items-center">
             <Gloop id={mine!.avatar} face="laugh" size={110} className="wobble" />
@@ -37,7 +56,25 @@ export function Results({ room, me, busy, onAgain, onLeave }: { room: PublicRoom
             </h2>
           </div>
         )}
-        <h3 className="mb-2 font-display text-xl font-extrabold">Leaderboard</h3>
+        {/* Leaderboard and the game's chat, side by side as tabs */}
+        <div className="mb-3 grid grid-cols-2 gap-2" role="tablist">
+          {(["board", "chat"] as const).map((t) => (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={`rounded-xl border-[3px] border-ink py-1 font-display text-lg font-extrabold ${tab === t ? "bg-ink text-white" : "bg-white"}`}
+            >
+              {t === "board" ? "Leaderboard" : `Chat${chat.length ? ` (${chat.length})` : ""}`}
+            </button>
+          ))}
+        </div>
+        {tab === "chat" ? (
+          <div className="mb-4 flex h-[46dvh] min-h-[260px] flex-col overflow-hidden rounded-2xl border-[3px] border-ink">
+            <Chat messages={chat} me={me} onSend={onChat} mood="lobby" className="flex-1" />
+          </div>
+        ) : (
         <ol className="mb-4 max-h-[42dvh] space-y-1.5 overflow-y-auto">
           {ranking.map((r) => (
             <li
@@ -56,6 +93,7 @@ export function Results({ room, me, busy, onAgain, onLeave }: { room: PublicRoom
             </li>
           ))}
         </ol>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <button className="btn bg-white py-2 text-lg" onClick={onLeave}>
             Leave
@@ -64,6 +102,7 @@ export function Results({ room, me, busy, onAgain, onLeave }: { room: PublicRoom
             Play again
           </button>
         </div>
+        <p className="mt-3 text-center text-xs text-ink/60">This table closes 15 minutes after the game, or when everyone has left.</p>
       </div>
     </div>
   );

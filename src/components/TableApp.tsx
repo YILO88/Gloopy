@@ -26,8 +26,8 @@ export function TableApp({ code }: { code: string }) {
     return (
       <Centered>
         <Gloop id="sky" face="shock" size={110} />
-        <h1 className="font-display text-3xl font-extrabold">No table called {code}</h1>
-        <p>It may have closed, or the code has a typo.</p>
+        <h1 className="font-display text-3xl font-extrabold">Table {code} is closed</h1>
+        <p>Tables close when everyone leaves, 15 minutes after a game ends, or after a day without play. Check the code, or start a new table.</p>
         <Link href="/" className="btn mt-2 inline-block bg-lime px-5 py-2 text-xl">
           Back to start
         </Link>
@@ -76,7 +76,7 @@ export function TableApp({ code }: { code: string }) {
       onChat={r.sendChat}
       onLeave={leave}
     >
-      {room.phase === "results" && <Results room={room} me={me} busy={r.busy} onAgain={r.again} onLeave={leave} />}
+      {room.phase === "results" && <Results room={room} me={me} busy={r.busy} chat={r.chat} onChat={r.sendChat} onAgain={r.again} onLeave={leave} />}
     </Table>
   );
 }

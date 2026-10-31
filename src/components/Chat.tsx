@@ -108,15 +108,19 @@ export function Chat({
           className={`shrink-0 rounded-lg px-2 py-1.5 text-sm font-semibold ${picker === "sticker" ? (t ? "bg-white/20 text-chalk" : "bg-lime") : t ? "text-dim" : ""}`}
           onClick={() => setPicker(picker === "sticker" ? null : "sticker")}
           aria-pressed={picker === "sticker"}
+          aria-label="Stickers"
+          title="Stickers"
         >
-          Stickers
+          🙂
         </button>
         <button
           className={`shrink-0 rounded-lg px-2 py-1.5 text-sm font-semibold ${picker === "gif" ? (t ? "bg-white/20 text-chalk" : "bg-lime") : t ? "text-dim" : ""}`}
           onClick={() => setPicker(picker === "gif" ? null : "gif")}
           aria-pressed={picker === "gif"}
+          aria-label="GIFs"
+          title="GIFs"
         >
-          GIFs
+          GIF
         </button>
         <input
           className={
