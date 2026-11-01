@@ -41,7 +41,7 @@ function actionTag(a?: string): { text: string; colour: string } | null {
   if (s.startsWith("Fold")) t = { text: "FOLD", colour: "#e5484d" };
   else if (s.startsWith("Check")) t = { text: "CHECK", colour: "#30a46c" };
   else if (s.startsWith("Call")) t = { text: `CALL ${fmt(n)}`, colour: "#30a46c" };
-  else if (s.startsWith("Raise")) t = { text: `RAISE ${fmt(n)}`, colour: "#8e4ec6" };
+  else if (s.startsWith("Raise")) t = { text: `RAISE ${fmt(n)}`, colour: "#7a4dff" };
   else if (s.startsWith("All in")) t = { text: "ALL IN", colour: "#ffb224" };
   else if (s.startsWith("Small blind")) t = { text: `SB ${fmt(n)}`, colour: "#3e63dd" };
   else if (s.startsWith("Big blind")) t = { text: `BB ${fmt(n)}`, colour: "#3e63dd" };
@@ -319,7 +319,7 @@ export function Table(props: {
             ⋯
           </button>
           {menuOpen && (
-            <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl bg-[#0f1f1d] text-sm shadow-xl ring-1 ring-white/10">
+            <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-xl bg-[#1a0f30] text-sm shadow-xl ring-1 ring-white/10">
               <div className="px-4 py-2 text-xs text-dim">Table {room.code}</div>
               <button className="block w-full px-4 py-2.5 text-left hover:bg-white/10" onClick={share}>
                 {copied ? "Link copied" : "Share table link"}
@@ -353,7 +353,7 @@ export function Table(props: {
                       .map((m) => (
                         <button
                           key={m.id}
-                          className={`flex w-full items-center justify-between px-6 py-2 text-left ${confirmKick === m.id ? "bg-[#5a2026] text-white" : "text-dim hover:bg-white/10"}`}
+                          className={`flex w-full items-center justify-between px-6 py-2 text-left ${confirmKick === m.id ? "bg-[#5a1f45] text-white" : "text-dim hover:bg-white/10"}`}
                           onClick={() => {
                             if (confirmKick === m.id) {
                               props.onKick(m.id);
@@ -594,7 +594,7 @@ export function Table(props: {
           )}
           {/* won without a showdown: I choose whether everyone sees my cards */}
           {canShowMine && !keepHidden && (
-            <div className="relative z-30 overflow-hidden bg-black/55 px-3 pb-3 pt-2.5 backdrop-blur-sm">
+            <div className="relative z-30 overflow-hidden bg-[#140a28]/75 px-3 pb-3 pt-2.5 backdrop-blur-sm">
               {g.nextHandAt && (
                 <div
                   className="absolute left-0 top-0 h-[3px] bg-[#3ddc84] transition-[width] duration-200 ease-linear"
@@ -610,7 +610,7 @@ export function Table(props: {
                   <button className="tbtn bg-white/10 text-sm text-white sm:px-4" onClick={() => setKeepHidden(true)}>
                     Keep hidden
                   </button>
-                  <button className="tbtn col-span-2 flex items-center justify-center gap-2 bg-[#1f7a4d] text-white sm:px-5" onClick={props.onShowCards}>
+                  <button className="tbtn col-span-2 flex items-center justify-center gap-2 bg-[#1f6b72] text-white sm:px-5" onClick={props.onShowCards}>
                     <span className="flex -space-x-2" aria-hidden>
                       {myCards.map((c) => (
                         <PlayingCard key={c} card={c} size="xs" />
@@ -629,7 +629,7 @@ export function Table(props: {
           )}
 
           {/* phone chat bar */}
-          <button className="flex items-center gap-3 border-t border-white/10 bg-black/20 px-4 py-3 text-left backdrop-blur-sm lg:hidden" onClick={() => openChat(false)}>
+          <button className="flex items-center gap-3 border-t border-white/10 bg-[#100822]/60 px-4 py-3 text-left backdrop-blur-sm lg:hidden" onClick={() => openChat(false)}>
             <span className="text-lime" aria-hidden>
               💬
             </span>
@@ -642,7 +642,7 @@ export function Table(props: {
         </div>
 
         {/* desktop chat */}
-        <aside className="hidden w-[330px] flex-col border-l border-white/10 bg-black/15 backdrop-blur-sm lg:flex" aria-label="Chat">
+        <aside className="hidden w-[330px] flex-col border-l border-white/10 bg-[#0e071e]/55 backdrop-blur-sm lg:flex" aria-label="Chat">
           <Chat messages={chat} me={me} onSend={props.onChat} mood="table" className="flex-1" />
         </aside>
       </div>
@@ -650,7 +650,7 @@ export function Table(props: {
       {chatOpen && (
         <div className="fixed inset-0 z-30 flex flex-col bg-black/10 lg:hidden" onClick={() => setChatOpen(false)}>
           <div
-            className="mt-auto flex h-[60dvh] flex-col rounded-t-2xl border-t border-white/15 bg-[#0b1816]/45 backdrop-blur-md"
+            className="mt-auto flex h-[60dvh] flex-col rounded-t-2xl border-t border-white/15 bg-[#140a28]/50 backdrop-blur-md"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center px-4 py-2">
@@ -1102,7 +1102,7 @@ function ActionBar({
   const confirm = () => act(to >= maxTo ? { type: "allin" } : { type: "raise", to });
 
   return (
-    <div className="relative z-30 bg-black/50 px-3 pb-3 pt-2">
+    <div className="relative z-30 bg-[#140a28]/75 px-3 pb-3 pt-2">
       {armed && canRaise && (
         <div className="absolute bottom-full right-3 mb-3 flex h-[260px] w-[150px] justify-end sm:h-[300px]">
           <button
@@ -1128,7 +1128,7 @@ function ActionBar({
           >
             {/* the rail */}
             <div className="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 rounded-full border border-white/25 bg-black/45" />
-            <div className="absolute bottom-0 left-1/2 w-3 -translate-x-1/2 rounded-full bg-[#8e4ec6]" style={{ height: `${tOf(to) * 100}%` }} />
+            <div className="absolute bottom-0 left-1/2 w-3 -translate-x-1/2 rounded-full bg-[#7a4dff]" style={{ height: `${tOf(to) * 100}%` }} />
             {/* stops */}
             {stops.map(([label, v]) => (
               <button
@@ -1144,7 +1144,7 @@ function ActionBar({
             ))}
             {/* thumb + amount bubble */}
             <div
-              className="pointer-events-none absolute left-1/2 h-10 w-10 -translate-x-1/2 rounded-full border-4 border-[#8e4ec6] bg-white shadow-lg"
+              className="pointer-events-none absolute left-1/2 h-10 w-10 -translate-x-1/2 rounded-full border-4 border-[#7a4dff] bg-white shadow-lg"
               style={{ bottom: `calc(${tOf(to) * 100}% - 20px)` }}
             />
             <div
@@ -1157,20 +1157,20 @@ function ActionBar({
         </div>
       )}
       <div className="grid grid-cols-3 gap-2">
-        <button className="tbtn bg-[#5a2026] text-white" disabled={busy} onClick={() => act({ type: "fold" })}>
+        <button className="tbtn bg-[#5a1f45] text-white" disabled={busy} onClick={() => act({ type: "fold" })}>
           FOLD
         </button>
         {owe === 0 ? (
-          <button className="tbtn bg-[#1f7a4d] text-white" disabled={busy} onClick={() => act({ type: "check" })}>
+          <button className="tbtn bg-[#1f6b72] text-white" disabled={busy} onClick={() => act({ type: "check" })}>
             CHECK
           </button>
         ) : (
-          <button className="tbtn bg-[#1f7a4d] text-white tabular" disabled={busy} onClick={() => act({ type: "call" })}>
+          <button className="tbtn bg-[#1f6b72] text-white tabular" disabled={busy} onClick={() => act({ type: "call" })}>
             {toCall >= seat.chips ? "ALL IN" : `CALL ${toCall.toLocaleString()}`}
           </button>
         )}
         <button
-          className={`tbtn flex touch-none select-none flex-col items-center justify-center bg-[#8e4ec6] !py-1.5 leading-tight text-white disabled:bg-white/5 disabled:text-white/40 ${armed ? "ring-[3px] ring-white" : ""}`}
+          className={`tbtn flex touch-none select-none flex-col items-center justify-center bg-[#7a4dff] !py-1.5 leading-tight text-white disabled:bg-white/5 disabled:text-white/40 ${armed ? "ring-[3px] ring-white" : ""}`}
           disabled={busy || !canRaise}
           onPointerDown={(e) => onDown(e, true)}
           onPointerMove={onMove}
