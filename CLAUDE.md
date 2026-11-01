@@ -21,4 +21,5 @@ Next.js + Tailwind on Vercel, Supabase (database, Realtime, anonymous sign-in). 
 ## Working rules
 - `npm test` must pass (rule tests + 400 random bot games). `npm run local` runs without Supabase.
 - `/check` on the live site is the card-privacy self-test; keep it passing.
+- Pauses between hands and before the final leaderboard: 3 seconds, never more (owner's rule).
 - Design: playful "sticker" style outside the table; realistic, calmer style at the table (Plato is the reference). Keep table text short.
