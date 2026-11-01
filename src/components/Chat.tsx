@@ -57,7 +57,7 @@ export function Chat({
                 {m.kind === "text" && (
                   <span
                     className={`inline-block break-words rounded-2xl px-3 py-1.5 text-sm ${
-                      t ? (mine ? "bg-glow text-chalk" : "bg-white/10 text-chalk") : mine ? "bg-lime text-ink" : "bg-mist text-ink"
+                      t ? (mine ? "bg-felt text-chalk" : "bg-white/10 text-chalk") : mine ? "bg-lime text-ink" : "bg-mist text-ink"
                     }`}
                   >
                     {m.body}
@@ -125,7 +125,7 @@ export function Chat({
         <input
           className={
             t
-              ? "min-w-0 flex-1 rounded-xl border border-white/15 bg-[#1e1038]/60 px-3 py-2 text-sm text-chalk placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-brass"
+              ? "min-w-0 flex-1 rounded-xl border border-white/15 bg-black/30 px-3 py-2 text-sm text-chalk placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-brass"
               : "field min-w-0 flex-1 py-1.5 text-sm"
           }
           placeholder="Say hello…"
@@ -137,7 +137,7 @@ export function Chat({
           aria-label="Chat message"
         />
         <button
-          className={t ? "tbtn shrink-0 bg-glow px-3 py-2 text-sm text-chalk" : "btn shrink-0 bg-lime px-3 py-1 text-base"}
+          className={t ? "tbtn shrink-0 bg-felt px-3 py-2 text-sm text-chalk" : "btn shrink-0 bg-lime px-3 py-1 text-base"}
           onClick={submit}
         >
           Send
