@@ -13,7 +13,7 @@ import { Results } from "./Results";
 import { Table } from "./Table";
 
 /** How long the final hand stays on screen before the leaderboard appears. */
-const RESULTS_DELAY_MS = 5000;
+const RESULTS_DELAY_MS = 3000;
 
 export function TableApp({ code }: { code: string }) {
   const router = useRouter();
