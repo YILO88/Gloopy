@@ -121,9 +121,9 @@ describe("blinds and turn order", () => {
 
   it("a hand dealt later uses the higher blinds", () => {
     let g = createGame(settings(), P(2), T0, rng);
-    g = act(g, g.hand!.toAct!, { type: "fold" }, T0 + 100_000);
-    g = advance(g, T0 + 200_000, rng);
-    expect(g.hand!.bigBlind).toBe(80); // 200s in → level 2
+    g = act(g, g.hand!.toAct!, { type: "fold" }, T0 + 185_000);
+    g = advance(g, g.nextHandAt!, rng); // next hand dealt just after the pause
+    expect(g.hand!.bigBlind).toBe(80); // over 180s in → level 2 (20 → 40 → 80)
   });
 });
 

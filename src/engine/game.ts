@@ -65,8 +65,8 @@ export function validateSettings(s: Settings): string | null {
 }
 
 /** Pause after a hand so everyone can see what happened, before the next deal. */
-export const PAUSE_AFTER_SHOWDOWN_MS = 5500; // time to see the board and everyone's cards
-export const PAUSE_AFTER_FOLD_MS = 4000; // gives the winner 3+ seconds to tap "Show my cards"
+export const PAUSE_AFTER_SHOWDOWN_MS = 3000; // time to see the board and everyone's cards (owner: never over 3s)
+export const PAUSE_AFTER_FOLD_MS = 3000; // time to see the board and for the winner to tap "Show my cards"
 /** Missed turns in a row before a player is removed. */
 export const MAX_STRIKES = 3;
 
