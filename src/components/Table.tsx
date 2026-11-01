@@ -901,21 +901,76 @@ function ActionBar({
   const minTo = g.legal?.minRaiseTo ?? Math.min(g.currentBet + g.minRaise, maxTo);
   const canRaise = !!g.legal?.canRaise;
   const step = Math.max(1, g.blinds.bigBlind);
-  const [open, setOpen] = useState(false);
+  // Swipe-up raise: press Raise and slide up (or tap Raise, then drag the slider). Tap Raise again to send.
+  const [armed, setArmed] = useState(false);
   const [to, setTo] = useState(minTo);
   useEffect(() => {
     setTo(minTo);
-    setOpen(false);
+    setArmed(false);
   }, [minTo, g.handNumber, g.street]);
 
   const clamp = (v: number) => Math.max(minTo, Math.min(maxTo, Math.round(v)));
   const potAfterCall = g.pot + toCall;
-  // Three simple choices, each showing exactly how much it is.
-  const quick: [string, number][] = [
-    ["Min", minTo],
-    ["Pot", clamp(g.currentBet + potAfterCall)],
-    ["All in", maxTo],
-  ];
+  const range = Math.max(1, maxTo - minTo);
+  // Curved scale: the bottom of the slider moves in small steps, the top in big ones.
+  const tOf = (v: number) => Math.sqrt(Math.max(0, Math.min(1, (v - minTo) / range)));
+  const stops: [string, number][] = [];
+  const addStop = (label: string, v: number) => {
+    v = clamp(v);
+    if (stops.some(([, x]) => Math.abs(tOf(x) - tOf(v)) < 0.09)) return; // too close to another label
+    stops.push([label, v]);
+  };
+  addStop("All in", maxTo);
+  addStop("Min", minTo);
+  addStop("Pot", g.currentBet + potAfterCall);
+  addStop("½ pot", g.currentBet + potAfterCall / 2);
+
+  const track = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ y: number; moved: boolean; wasArmed: boolean } | null>(null);
+  const lastSnap = useRef<number | null>(null);
+  const valueAt = (clientY: number) => {
+    const r = track.current?.getBoundingClientRect();
+    if (!r) return to;
+    const t = Math.max(0, Math.min(1, (r.bottom - clientY) / r.height));
+    const snap = stops.find(([, v]) => Math.abs(tOf(v) - t) < 0.045);
+    if (snap) {
+      if (lastSnap.current !== snap[1]) navigator.vibrate?.(8);
+      lastSnap.current = snap[1];
+      return snap[1];
+    }
+    lastSnap.current = null;
+    if (t >= 0.995) return maxTo;
+    const raw = minTo + range * t * t;
+    return clamp(Math.round(raw / step) * step);
+  };
+  const onDown = (e: React.PointerEvent, fromButton: boolean) => {
+    if (busy || !canRaise) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    drag.current = { y: e.clientY, moved: false, wasArmed: armed };
+    if (!fromButton) setTo(valueAt(e.clientY));
+    setArmed(true);
+  };
+  const onMove = (e: React.PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    if (Math.abs(e.clientY - d.y) > 6) d.moved = true;
+    if (d.moved) setTo(valueAt(e.clientY));
+  };
+  const onUpButton = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (d && !d.moved && d.wasArmed) confirm();
+  };
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowUp" || e.key === "ArrowRight") setTo(clamp(to + step));
+    else if (e.key === "ArrowDown" || e.key === "ArrowLeft") setTo(clamp(to - step));
+    else if (e.key === "End") setTo(maxTo);
+    else if (e.key === "Home") setTo(minTo);
+    else if (e.key === "Enter") confirm();
+    else if (e.key === "Escape") setArmed(false);
+    else return;
+    e.preventDefault();
+  };
   const betWord = g.currentBet === 0 ? "BET" : "RAISE";
   const act = async (a: Action) => {
     sounds.unlock();
@@ -939,69 +994,61 @@ function ActionBar({
 
   const confirm = () => act(to >= maxTo ? { type: "allin" } : { type: "raise", to });
 
-  if (open && canRaise) {
-    return (
-      <div className="bg-black/55 px-3 pb-3 pt-3">
-        <div className="mb-3 rounded-2xl bg-black/35 p-3">
-          <div className="flex items-center justify-between">
-            <button
-              className="grid h-12 w-12 place-items-center rounded-full bg-white/10 text-2xl disabled:opacity-30"
-              onClick={() => setTo(clamp(to - step))}
-              disabled={to <= minTo}
-              aria-label="Less"
-            >
-              −
-            </button>
-            <div className="text-center">
-              <div className="text-xs text-dim">{to >= maxTo ? "All in" : betWord === "BET" ? "Bet" : "Raise to"}</div>
-              <div className="text-3xl font-bold text-white tabular">{to.toLocaleString()}</div>
-            </div>
-            <button
-              className="grid h-12 w-12 place-items-center rounded-full bg-white/10 text-2xl disabled:opacity-30"
-              onClick={() => setTo(clamp(to + step))}
-              disabled={to >= maxTo}
-              aria-label="More"
-            >
-              +
-            </button>
-          </div>
-          <input
-            type="range"
-            min={minTo}
-            max={maxTo}
-            step={step}
-            value={to}
-            onChange={(e) => setTo(clamp(+e.target.value))}
-            className="mt-3 w-full accent-[#8e4ec6]"
-            aria-label="Amount"
-          />
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {quick.map(([label, v]) => (
+  return (
+    <div className="relative z-30 bg-black/50 px-3 pb-3 pt-2">
+      {armed && canRaise && (
+        <div className="absolute bottom-full right-3 mb-3 flex h-[260px] w-[150px] justify-end sm:h-[300px]">
+          <button
+            className="absolute -top-2 left-0 grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white/85 backdrop-blur-sm"
+            onClick={() => setArmed(false)}
+            aria-label="Cancel raise"
+          >
+            ✕
+          </button>
+          <div
+            ref={track}
+            role="slider"
+            tabIndex={0}
+            aria-label="Raise amount"
+            aria-valuemin={minTo}
+            aria-valuemax={maxTo}
+            aria-valuenow={to}
+            onKeyDown={onKey}
+            onPointerDown={(e) => onDown(e, false)}
+            onPointerMove={onMove}
+            onPointerUp={() => (drag.current = null)}
+            className="relative mr-[14px] h-full w-12 touch-none select-none"
+          >
+            {/* the rail */}
+            <div className="absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 rounded-full border border-white/25 bg-black/45" />
+            <div className="absolute bottom-0 left-1/2 w-3 -translate-x-1/2 rounded-full bg-[#8e4ec6]" style={{ height: `${tOf(to) * 100}%` }} />
+            {/* stops */}
+            {stops.map(([label, v]) => (
               <button
                 key={label}
+                className={`absolute right-full mr-1 -translate-y-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-xs drop-shadow ${to === v ? "bg-white font-semibold text-ink" : "bg-black/50 text-white backdrop-blur-sm"}`}
+                style={{ bottom: `calc(${tOf(v) * 100}% - 12px)`, transform: "none" }}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => setTo(v)}
-                className={`rounded-xl py-1.5 text-center transition ${to === v ? "bg-[#8e4ec6] text-white" : "bg-white/10 text-white/85"}`}
               >
-                <div className="text-xs font-semibold">{label}</div>
-                <div className="text-[11px] opacity-80 tabular">{v.toLocaleString()}</div>
+                {label}
+                {label !== "All in" && <span className="opacity-75"> · {v.toLocaleString()}</span>}
               </button>
             ))}
+            {/* thumb + amount bubble */}
+            <div
+              className="pointer-events-none absolute left-1/2 h-10 w-10 -translate-x-1/2 rounded-full border-4 border-[#8e4ec6] bg-white shadow-lg"
+              style={{ bottom: `calc(${tOf(to) * 100}% - 20px)` }}
+            />
+            <div
+              className="pointer-events-none absolute left-1/2 -translate-x-1/2 whitespace-nowrap rounded-lg bg-white px-2 py-0.5 text-sm font-bold text-ink shadow tabular"
+              style={{ bottom: `calc(${tOf(to) * 100}% + 24px)` }}
+            >
+              {to >= maxTo ? "ALL IN" : to.toLocaleString()}
+            </div>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-2">
-          <button className="tbtn bg-white/10 text-white" onClick={() => setOpen(false)}>
-            Cancel
-          </button>
-          <button className="tbtn col-span-2 bg-[#8e4ec6] text-white tabular" disabled={busy} onClick={confirm}>
-            {to >= maxTo ? "ALL IN" : `${betWord} ${to.toLocaleString()}`}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-black/50 px-3 pb-3 pt-2">
+      )}
       <div className="grid grid-cols-3 gap-2">
         <button className="tbtn bg-[#5a2026] text-white" disabled={busy} onClick={() => act({ type: "fold" })}>
           FOLD
@@ -1015,8 +1062,23 @@ function ActionBar({
             {toCall >= seat.chips ? "ALL IN" : `CALL ${toCall.toLocaleString()}`}
           </button>
         )}
-        <button className="tbtn bg-[#8e4ec6] text-white disabled:bg-white/5 disabled:text-white/40" disabled={busy || !canRaise} onClick={() => setOpen(true)}>
-          {betWord}
+        <button
+          className={`tbtn flex touch-none select-none flex-col items-center justify-center bg-[#8e4ec6] !py-1.5 leading-tight text-white disabled:bg-white/5 disabled:text-white/40 ${armed ? "ring-[3px] ring-white" : ""}`}
+          disabled={busy || !canRaise}
+          onPointerDown={(e) => onDown(e, true)}
+          onPointerMove={onMove}
+          onPointerUp={onUpButton}
+          onPointerCancel={() => (drag.current = null)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              armed ? confirm() : setArmed(true);
+            }
+          }}
+          aria-label={armed ? `${to >= maxTo ? "All in" : `${betWord} ${to}`}, press again to send` : `${betWord}, slide up to choose the amount`}
+        >
+          <span className="tabular">{armed ? (to >= maxTo ? "ALL IN" : `${betWord} ${to.toLocaleString()}`) : betWord}</span>
+          <span className="text-[10px] font-medium opacity-80">{armed ? "tap to send" : "↑ slide up"}</span>
         </button>
       </div>
     </div>
