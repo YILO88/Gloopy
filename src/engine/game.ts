@@ -65,8 +65,12 @@ export function validateSettings(s: Settings): string | null {
 }
 
 /** Pause after a hand so everyone can see what happened, before the next deal. */
-export const PAUSE_AFTER_SHOWDOWN_MS = 3000; // time to see the board and everyone's cards (owner: never over 3s)
-export const PAUSE_AFTER_FOLD_MS = 3000; // time to see the board and for the winner to tap "Show my cards"
+// Owner's rule: cards stay fully on screen for 3 seconds. The pause adds the time the cards take to turn over.
+export const REVEAL_MS = 800; // longest turn-over animation (river + showdown flips)
+export const PAUSE_AFTER_SHOWDOWN_MS = 3000 + REVEAL_MS; // see the board and everyone's cards for 3s
+export const PAUSE_AFTER_FOLD_MS = 3500; // see the board, and time for the winner to tap "Show my cards"
+export const SHOWN_CARDS_MS = 2500; // after "Show my cards", everyone gets at least this long to see them
+export const MAX_PAUSE_MS = 5000; // ...but the next hand never waits longer than this in total
 /** Missed turns in a row before a player is removed. */
 export const MAX_STRIKES = 3;
 
@@ -663,7 +667,7 @@ export function removePlayer(state: GameState, id: string, now: number): GameSta
 }
 
 /** A player who won the pot without a showdown chooses to show their cards. */
-export function showCards(state: GameState, id: string): GameState {
+export function showCards(state: GameState, id: string, now?: number): GameState {
   const h = state.hand;
   const r = h?.result;
   if (!h || !r || h.street !== "complete") throw new GameError("You can show your cards once the hand is over");
@@ -672,6 +676,11 @@ export function showCards(state: GameState, id: string): GameState {
   const st = clone(state);
   const seat = st.hand!.seats[id];
   st.hand!.result!.shown[id] = { hole: seat.hole, handName: describeHand([...seat.hole, ...st.hand!.board]), bestCards: [] };
+  // Give everyone time to actually see them (capped so the game never stalls).
+  if (now !== undefined && st.nextHandAt !== null) {
+    const handEnded = st.nextHandAt - PAUSE_AFTER_FOLD_MS;
+    st.nextHandAt = Math.max(st.nextHandAt, Math.min(now + SHOWN_CARDS_MS, handEnded + MAX_PAUSE_MS));
+  }
   return st;
 }
 

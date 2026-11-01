@@ -27,6 +27,11 @@ export function Results({
 }) {
   const [tab, setTab] = useState<"board" | "chat">("board");
   const [sharing, setSharing] = useState(false);
+  // New messages since the chat was last open (the chat icon shows the count).
+  const [seen, setSeen] = useState(chat.length);
+  useEffect(() => {
+    if (tab === "chat") setSeen(chat.length);
+  }, [tab, chat.length]);
   const ranking = room.game?.ranking ?? [];
   const mine = ranking.find((r) => r.id === me);
   const iWon = mine?.position === 1;
@@ -61,22 +66,8 @@ export function Results({
             </h2>
           </div>
         )}
-        {/* Leaderboard and the game's chat, side by side as tabs */}
-        <div className="mb-3 grid grid-cols-2 gap-2" role="tablist">
-          {(["board", "chat"] as const).map((t) => (
-            <button
-              key={t}
-              role="tab"
-              aria-selected={tab === t}
-              onClick={() => setTab(t)}
-              className={`rounded-xl border-[3px] border-ink py-1 font-display text-lg font-extrabold ${tab === t ? "bg-ink text-white" : "bg-white"}`}
-            >
-              {t === "board" ? "Leaderboard" : `Chat${chat.length ? ` (${chat.length})` : ""}`}
-            </button>
-          ))}
-        </div>
         {tab === "chat" ? (
-          <div className="mb-4 flex h-[46dvh] min-h-[260px] flex-col overflow-hidden rounded-2xl border-[3px] border-ink">
+          <div className="mb-4 flex h-[46dvh] min-h-[260px] flex-col overflow-hidden rounded-2xl border-[3px] border-ink" aria-label="Chat">
             <Chat messages={chat} me={me} onSend={onChat} mood="lobby" className="flex-1" />
           </div>
         ) : (
@@ -99,12 +90,25 @@ export function Results({
           ))}
         </ol>
         )}
-        <div className="grid grid-cols-2 gap-3">
-          <button className="btn bg-white py-2 text-lg" onClick={onLeave}>
+        <div className="flex gap-3">
+          <button className="btn flex-1 bg-white py-2 text-lg" onClick={onLeave}>
             Leave
           </button>
-          <button className="btn bg-lime py-2 text-lg" onClick={onAgain} disabled={busy}>
+          <button className="btn flex-1 bg-lime py-2 text-lg" onClick={onAgain} disabled={busy}>
             Play again
+          </button>
+          <button
+            className={`btn relative grid w-12 shrink-0 place-items-center text-xl ${tab === "chat" ? "bg-ink text-white" : "bg-white"}`}
+            onClick={() => setTab(tab === "chat" ? "board" : "chat")}
+            aria-label={tab === "chat" ? "Back to leaderboard" : "Open chat"}
+            aria-pressed={tab === "chat"}
+          >
+            {tab === "chat" ? "🏆" : "💬"}
+            {tab !== "chat" && chat.length > seen && (
+              <span className="absolute -right-2 -top-2 grid h-5 min-w-5 place-items-center rounded-full border-2 border-ink bg-gum px-1 text-[11px] font-bold text-white">
+                {chat.length - seen}
+              </span>
+            )}
           </button>
         </div>
         {sharing && mine && (

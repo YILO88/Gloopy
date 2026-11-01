@@ -16,6 +16,9 @@ import {
   skipDisconnected,
   removePlayer,
   showCards,
+  PAUSE_AFTER_FOLD_MS,
+  SHOWN_CARDS_MS,
+  MAX_PAUSE_MS,
   totalChips,
   HandSeat,
 } from "./game";
@@ -531,5 +534,18 @@ describe("showing cards after winning without a showdown", () => {
     g = showCards(g, "p2");
     expect(g.hand!.result!.shown.p2.hole).toEqual(g.hand!.seats.p2.hole);
     expect(JSON.stringify(publicView(g))).toContain(g.hand!.seats.p2.hole[0]);
+  });
+
+  it("showing late gives everyone time to see, but never stalls past the cap", () => {
+    let g = createGame(settings(), P(3), T0, rng);
+    g = act(g, "p0", { type: "fold" }, T0);
+    g = act(g, "p1", { type: "fold" }, T0);
+    expect(g.nextHandAt).toBe(T0 + PAUSE_AFTER_FOLD_MS);
+    const early = showCards(g, "p2", T0 + 500);
+    expect(early.nextHandAt).toBe(T0 + PAUSE_AFTER_FOLD_MS); // already enough time left
+    const late = showCards(g, "p2", T0 + 2000);
+    expect(late.nextHandAt).toBe(T0 + 2000 + SHOWN_CARDS_MS);
+    const veryLate = showCards(g, "p2", T0 + 3400);
+    expect(veryLate.nextHandAt).toBe(T0 + MAX_PAUSE_MS);
   });
 });

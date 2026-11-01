@@ -21,5 +21,5 @@ Next.js + Tailwind on Vercel, Supabase (database, Realtime, anonymous sign-in). 
 ## Working rules
 - `npm test` must pass (rule tests + 400 random bot games). `npm run local` runs without Supabase.
 - `/check` on the live site is the card-privacy self-test; keep it passing.
-- Pauses between hands and before the final leaderboard: 3 seconds, never more (owner's rule).
+- Pauses between hands and before the final leaderboard: cards stay fully visible for 3 seconds (pause = 3s + the ~0.8s turn-over animation). Don't make pauses longer than that (owner's rule). After a fold-win the winner gets 3.5s to tap Show; showing guarantees 2.5s of viewing, capped at 5s total.
 - Design: playful "sticker" style outside the table; realistic, calmer style at the table (Plato is the reference). Keep table text short.

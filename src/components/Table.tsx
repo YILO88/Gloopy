@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Action, PublicSeat } from "@/engine/game";
+import { PAUSE_AFTER_FOLD_MS, type Action, type PublicSeat } from "@/engine/game";
 import { describeHand, evaluateBest } from "@/engine/evaluate";
 import type { PublicRoom } from "@/lib/ops";
 import type { ChatMessage } from "@/lib/client/useRoom";
@@ -250,6 +250,10 @@ export function Table(props: {
     return () => clearTimeout(t);
   }, [bigWin, ready]);
 
+  const canShowMine = !!result && !result.showdown && !!result.won[me] && !result.shown[me];
+  const [keepHidden, setKeepHidden] = useState(false);
+  useEffect(() => setKeepHidden(false), [g.handNumber]);
+
   const handName = myCards.length === 2 ? describeHand([...myCards, ...g.board]) : null;
 
   const share = async () => {
@@ -368,7 +372,7 @@ export function Table(props: {
         </div>
       )}
 
-      {((!chatOpen && toasts.length > 0) || (winOffer && !sharingWin)) && (
+      {((!chatOpen && g.status !== "finished" && toasts.length > 0) || (winOffer && !sharingWin)) && (
         <div className="pointer-events-none fixed inset-x-0 top-14 z-40 flex flex-col items-center gap-2 px-3 lg:right-[330px]" aria-live="polite">
           {winOffer && !sharingWin && (
             <div className="toast-in pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border border-white/15 bg-black/45 px-3 py-2 shadow-lg backdrop-blur-md">
@@ -385,7 +389,7 @@ export function Table(props: {
               </button>
             </div>
           )}
-          {!chatOpen && toasts.map((m) => (
+          {!chatOpen && g.status !== "finished" && toasts.map((m) => (
             <div
               key={m.id}
               className="toast-in pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border border-white/15 bg-black/35 px-3 py-2 shadow-lg backdrop-blur-md lg:hidden"
@@ -534,8 +538,6 @@ export function Table(props: {
                   pop={pops[me]?.sticker}
                   host={room.hostId === me}
                   pending={pending}
-                  canShow={!!result && !result.showdown && !!result.won[me] && !result.shown[me]}
-                  onShow={props.onShowCards}
                   ready={ready}
                   dealCount={ordered.length}
                   fromCentre={{ x: 0, y: -box.h * 0.4 }}
@@ -556,6 +558,36 @@ export function Table(props: {
                 return ok;
               }}
             />
+          )}
+          {/* won without a showdown: I choose whether everyone sees my cards */}
+          {canShowMine && !keepHidden && (
+            <div className="relative z-30 overflow-hidden bg-black/55 px-3 pb-3 pt-2.5 backdrop-blur-sm">
+              {g.nextHandAt && (
+                <div
+                  className="absolute left-0 top-0 h-[3px] bg-[#3ddc84] transition-[width] duration-200 ease-linear"
+                  style={{ width: `${Math.max(0, Math.min(1, (g.nextHandAt - now) / PAUSE_AFTER_FOLD_MS)) * 100}%` }}
+                />
+              )}
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                <div className="min-w-0 flex-1 text-white">
+                  <span className="text-sm font-semibold">You win! </span>
+                  <span className="text-sm text-dim">Show your cards to the table?</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 sm:flex">
+                  <button className="tbtn bg-white/10 text-sm text-white sm:px-4" onClick={() => setKeepHidden(true)}>
+                    Keep hidden
+                  </button>
+                  <button className="tbtn col-span-2 flex items-center justify-center gap-2 bg-[#1f7a4d] text-white sm:px-5" onClick={props.onShowCards}>
+                    <span className="flex -space-x-2" aria-hidden>
+                      {myCards.map((c) => (
+                        <PlayingCard key={c} card={c} size="xs" />
+                      ))}
+                    </span>
+                    SHOW CARDS
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
           {props.error && (
             <p role="alert" className="mx-3 mb-2 rounded-lg bg-alert/25 px-3 py-1.5 text-center text-sm text-[#ffd2cc]">
@@ -794,8 +826,6 @@ function MySeat({
   pop,
   host,
   pending,
-  canShow,
-  onShow,
   ready,
   dealCount,
   fromCentre,
@@ -809,8 +839,6 @@ function MySeat({
   pop?: string;
   host: boolean;
   pending: string | null;
-  canShow: boolean;
-  onShow: () => void;
   ready: boolean;
   dealCount: number;
   fromCentre: { x: number; y: number };
@@ -830,12 +858,6 @@ function MySeat({
         </span>
       ) : (
         !out && !toAct && <Tag action={pending ?? seat.lastAction} className="mb-1" />
-      )}
-      {/* won without a showdown: I choose whether everyone sees my cards */}
-      {canShow && (
-        <button onClick={onShow} className="action-tag mb-1 px-3 py-1 text-xs" style={{ ["--tag" as string]: "#3ddc84" }}>
-          SHOW MY CARDS
-        </button>
       )}
       {/* private: only I see my hand name */}
       {handName && !seat.folded && <div className="mb-1 text-sm font-semibold text-[#ffe08a] drop-shadow">{handName}</div>}

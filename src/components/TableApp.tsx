@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { PAUSE_AFTER_SHOWDOWN_MS } from "@/engine/game";
 import { useRoom } from "@/lib/client/useRoom";
 import { loadProfile, saveProfile } from "@/lib/client/api";
 import { sounds } from "@/lib/client/sound";
@@ -12,8 +13,8 @@ import { ProfilePicker } from "./ProfilePicker";
 import { Results } from "./Results";
 import { Table } from "./Table";
 
-/** How long the final hand stays on screen before the leaderboard appears. */
-const RESULTS_DELAY_MS = 3000;
+/** How long the final hand stays on screen before the leaderboard appears: as long as any other hand. */
+const RESULTS_DELAY_MS = PAUSE_AFTER_SHOWDOWN_MS;
 
 export function TableApp({ code }: { code: string }) {
   const router = useRouter();

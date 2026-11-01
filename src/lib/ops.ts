@@ -126,7 +126,7 @@ export function applyOp(room: Room, userId: string, op: Op, now: number, rng: Rn
     case "show":
       requireMember(r, userId);
       if (!r.game) throw new GameError("No game in progress");
-      r = { ...r, game: showCards(r.game, userId) };
+      r = { ...r, game: showCards(r.game, userId, now) };
       break;
     default:
       throw new GameError("Unknown request");
