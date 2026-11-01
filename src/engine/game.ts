@@ -22,7 +22,7 @@ export interface Settings {
   smallBlind: number; // starting small blind
   bigBlind: number; // starting big blind
   blindIntervalSec: number; // blinds double every 90 / 180 / 300 seconds
-  turnSeconds: number; // 10 / 20 / 30 / 45 / 60 / 90
+  turnSeconds: number; // 15 / 20 / 30 / 45 / 60 / 90
   endMode: "last" | "timed"; // last one standing, or a time limit
   timeLimitMin: number; // 30 / 45 / 60 / 90 (timed games only)
 }
@@ -36,7 +36,7 @@ export const SETTING_OPTIONS = {
     [50, 100],
   ] as [number, number][],
   blindIntervalSec: [90, 180, 300],
-  turnSeconds: [10, 20, 30, 45, 60, 90],
+  turnSeconds: [15, 20, 30, 45, 60, 90],
   endMode: ["last", "timed"] as const,
   timeLimitMin: [30, 45, 60, 90],
 };

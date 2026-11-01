@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Action, PublicSeat } from "@/engine/game";
-import { describeHand } from "@/engine/evaluate";
+import { describeHand, evaluateBest } from "@/engine/evaluate";
 import type { PublicRoom } from "@/lib/ops";
 import type { ChatMessage } from "@/lib/client/useRoom";
 import { sounds, isMuted, setMuted } from "@/lib/client/sound";
@@ -11,6 +11,7 @@ import { Chat } from "./Chat";
 import { GifArt, StickerArt } from "./Sticker";
 import { ChipAmount, ChipStack } from "./Chips";
 import { RulesModal } from "./Rules";
+import { ShareWin } from "./ShareWin";
 
 type Game = NonNullable<PublicRoom["game"]>;
 
@@ -127,10 +128,24 @@ export function Table(props: {
       h.board = 0;
     }
     if (g.board.length > h.board) {
-      for (let i = h.board; i < g.board.length; i++) sounds.card((i < 3 ? i * 170 : 0) + 120);
+      for (let i = h.board; i < g.board.length; i++) sounds.flip((i < 3 ? i * 170 : 0) + 120);
       h.board = g.board.length;
     }
   }, [g.handNumber, g.board.length, g.seats]);
+
+  // Other players' moves: chips for bets, a card toss for folds. (My own moves sound when I tap.)
+  const heardActs = useRef<Record<string, string | undefined>>({});
+  useEffect(() => {
+    const prev = heardActs.current;
+    const next: Record<string, string | undefined> = {};
+    for (const s of g.seats) {
+      next[s.id] = s.lastAction;
+      if (s.id === me || !s.lastAction || prev[s.id] === s.lastAction || !(s.id in prev)) continue;
+      if (s.lastAction === "Fold") sounds.fold();
+      else if (s.lastAction !== "Check") sounds.chip();
+    }
+    heardActs.current = next;
+  }, [g.seats, me]);
 
   const wasMyTurn = useRef(false);
   useEffect(() => {
@@ -207,6 +222,33 @@ export function Table(props: {
     const w = result.pots[0]?.winners ?? [];
     return new Set(w.flatMap((id) => result.shown[id]?.bestCards ?? []));
   }, [result]);
+
+  // The pot slides to the winner: chips sound as the chip stack flies.
+  const potHeard = useRef(g.street === "complete" ? g.handNumber : 0);
+  useEffect(() => {
+    if (!result || !ready || potHeard.current === g.handNumber) return;
+    potHeard.current = g.handNumber;
+    sounds.pot(250);
+  }, [result, ready, g.handNumber]);
+
+  // Big win (Flush or better, cards face up): offer "Share" for a few seconds.
+  const bigWin = useMemo(() => {
+    if (!result || !mySeat || !result.won[me] || !result.shown[me]) return null;
+    const all = [...result.shown[me].hole, ...g.board];
+    if (all.length < 5) return null;
+    const best = evaluateBest(all);
+    if (best.category < 5) return null;
+    return { hand: g.handNumber, amount: result.won[me], name: best.name, short: best.name.split(",")[0], cards: best.cards };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, me, g.handNumber]);
+  const [winOffer, setWinOffer] = useState<NonNullable<typeof bigWin> | null>(null);
+  const [sharingWin, setSharingWin] = useState<NonNullable<typeof bigWin> | null>(null);
+  useEffect(() => {
+    if (!bigWin || !ready) return;
+    setWinOffer(bigWin);
+    const t = setTimeout(() => setWinOffer((w) => (w?.hand === bigWin.hand ? null : w)), 9000);
+    return () => clearTimeout(t);
+  }, [bigWin, ready]);
 
   const handName = myCards.length === 2 ? describeHand([...myCards, ...g.board]) : null;
 
@@ -326,12 +368,27 @@ export function Table(props: {
         </div>
       )}
 
-      {!chatOpen && toasts.length > 0 && (
-        <div className="pointer-events-none fixed inset-x-0 top-14 z-40 flex flex-col items-center gap-2 px-3 lg:hidden" aria-live="polite">
-          {toasts.map((m) => (
+      {((!chatOpen && toasts.length > 0) || (winOffer && !sharingWin)) && (
+        <div className="pointer-events-none fixed inset-x-0 top-14 z-40 flex flex-col items-center gap-2 px-3 lg:right-[330px]" aria-live="polite">
+          {winOffer && !sharingWin && (
+            <div className="toast-in pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border border-white/15 bg-black/45 px-3 py-2 shadow-lg backdrop-blur-md">
+              {mySeat && <Gloop id={mySeat.avatar} face="laugh" size={34} />}
+              <span className="min-w-0 flex-1 text-sm text-white">
+                <span className="block text-xs font-semibold text-[#ffe08a]">Big win: +{winOffer.amount.toLocaleString()}</span>
+                You won with a <b>{winOffer.short}</b>
+              </span>
+              <button className="shrink-0 rounded-full bg-lime px-3.5 py-1.5 font-display font-extrabold text-ink" onClick={() => setSharingWin(winOffer)}>
+                Share
+              </button>
+              <button className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white/70 hover:bg-white/10" onClick={() => setWinOffer(null)} aria-label="Dismiss">
+                ✕
+              </button>
+            </div>
+          )}
+          {!chatOpen && toasts.map((m) => (
             <div
               key={m.id}
-              className="toast-in pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border border-white/15 bg-black/35 px-3 py-2 shadow-lg backdrop-blur-md"
+              className="toast-in pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border border-white/15 bg-black/35 px-3 py-2 shadow-lg backdrop-blur-md lg:hidden"
             >
               <button className="flex min-w-0 flex-1 items-center gap-2.5 text-left" onClick={() => openChat(true)} aria-label={`Reply to ${m.sender_name}`}>
                 <Gloop id={m.avatar} size={34} />
@@ -358,6 +415,23 @@ export function Table(props: {
             </div>
           ))}
         </div>
+      )}
+
+      {sharingWin && mySeat && (
+        <ShareWin
+          kind="hand"
+          gloop={mySeat.avatar}
+          face="laugh"
+          tag={`${sharingWin.short.toUpperCase()}!`}
+          headline={`${mySeat.name} won ${sharingWin.amount.toLocaleString()}`}
+          detail={`with a ${sharingWin.name}`}
+          cards={sharingWin.cards}
+          footer={`Table ${room.code} · ${window.location.host}`}
+          onClose={() => {
+            setSharingWin(null);
+            setWinOffer(null);
+          }}
+        />
       )}
 
       <div className="flex min-h-0 flex-1">
@@ -845,7 +919,8 @@ function ActionBar({
   const betWord = g.currentBet === 0 ? "BET" : "RAISE";
   const act = async (a: Action) => {
     sounds.unlock();
-    if (a.type !== "fold" && a.type !== "check") sounds.chip();
+    if (a.type === "fold") sounds.fold();
+    else if (a.type !== "check") sounds.chip();
     // Same wording the server uses, so the tag doesn't change when the confirmation lands.
     const label =
       a.type === "fold"

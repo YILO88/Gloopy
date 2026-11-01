@@ -1,5 +1,5 @@
 "use client";
-// Tiny synthesized sounds (no audio files needed). Browsers only allow sound after a tap.
+// Table sounds. Browsers only allow sound after a tap.
 
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -43,41 +43,74 @@ function tone(freq: number, start: number, dur: number, type: OscillatorType = "
   o.stop(a.currentTime + start + dur + 0.05);
 }
 
-/** A short papery "thwip", like a card sliding across felt. */
-function swish(start = 0, gain = 0.09) {
+// Real recordings (Kenney "Casino Audio", CC0) live in /public/sounds. They load after the first tap.
+const SAMPLES = {
+  deal: ["card-slide-1", "card-slide-2", "card-slide-3", "card-slide-4"],
+  flip: ["card-place-1", "card-place-2", "card-place-4"],
+  fold: ["card-shove-1", "card-shove-2"],
+  chip: ["chips-collide-1", "chips-collide-2", "chips-collide-3"],
+  pot: ["chips-handle-1", "chips-handle-5"],
+} as const;
+type Sample = keyof typeof SAMPLES;
+const buffers = new Map<string, AudioBuffer>();
+let loading = false;
+
+function load() {
+  const a = ac();
+  if (!a || loading) return;
+  loading = true;
+  for (const name of Object.values(SAMPLES).flat()) {
+    fetch(`/sounds/${name}.mp3`)
+      .then((r) => r.arrayBuffer())
+      .then((b) => new Promise<AudioBuffer>((ok, bad) => a.decodeAudioData(b, ok, bad)))
+      .then((buf) => buffers.set(name, buf))
+      .catch(() => {});
+  }
+}
+
+function play(kind: Sample, delayMs = 0, gain = 0.5) {
   const a = ac();
   if (!a || muted) return;
-  const len = Math.floor(a.sampleRate * 0.09);
-  const buf = a.createBuffer(1, len, a.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+  load();
+  const names = SAMPLES[kind];
+  const buf = buffers.get(names[Math.floor(Math.random() * names.length)]);
+  if (!buf) return;
   const src = a.createBufferSource();
   src.buffer = buf;
-  const f = a.createBiquadFilter();
-  f.type = "bandpass";
-  f.frequency.value = 2600;
-  f.Q.value = 0.8;
+  src.playbackRate.value = 0.95 + Math.random() * 0.1; // tiny variation so repeats don't sound robotic
   const g = a.createGain();
   g.gain.value = gain;
-  src.connect(f).connect(g).connect(a.destination);
-  src.start(a.currentTime + start);
+  src.connect(g).connect(a.destination);
+  src.start(a.currentTime + delayMs / 1000);
 }
 
 export const sounds = {
   unlock() {
-    ac();
+    load();
   },
-  /** One card landing. */
+  /** A card dealt to a player. */
   card(delayMs = 0) {
-    swish(delayMs / 1000);
+    play("deal", delayMs, 0.45);
+  },
+  /** A card turned face up on the board. */
+  flip(delayMs = 0) {
+    play("flip", delayMs, 0.5);
+  },
+  /** A hand thrown away. */
+  fold() {
+    play("fold", 0, 0.4);
   },
   yourTurn() {
     tone(880, 0, 0.15, "sine", 0.12);
     tone(1320, 0.12, 0.2, "sine", 0.1);
   },
+  /** Chips going into the pot. */
   chip() {
-    tone(2200, 0, 0.05, "square", 0.04);
-    tone(1700, 0.04, 0.05, "square", 0.03);
+    play("chip", 0, 0.5);
+  },
+  /** The pot sliding to the winner. */
+  pot(delayMs = 0) {
+    play("pot", delayMs, 0.55);
   },
   win() {
     [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.3, "triangle", 0.2));

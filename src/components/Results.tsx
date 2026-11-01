@@ -5,6 +5,7 @@ import { sounds } from "@/lib/client/sound";
 import type { ChatMessage } from "@/lib/client/useRoom";
 import { Gloop } from "./Gloop";
 import { Chat } from "./Chat";
+import { ShareWin } from "./ShareWin";
 
 /** End of game: winner sees "You won"; everyone gets the leaderboard and a sound. */
 export function Results({
@@ -25,6 +26,7 @@ export function Results({
   onLeave: () => void;
 }) {
   const [tab, setTab] = useState<"board" | "chat">("board");
+  const [sharing, setSharing] = useState(false);
   const ranking = room.game?.ranking ?? [];
   const mine = ranking.find((r) => r.id === me);
   const iWon = mine?.position === 1;
@@ -47,6 +49,9 @@ export function Results({
               You won
             </h2>
             <p className="text-ink/70">{mine!.chips.toLocaleString()} chips</p>
+            <button className="btn mt-2 bg-lime px-5 py-1.5 text-lg" onClick={() => setSharing(true)}>
+              Share my win
+            </button>
           </div>
         ) : (
           <div className="mb-3 flex flex-col items-center">
@@ -102,6 +107,24 @@ export function Results({
             Play again
           </button>
         </div>
+        {sharing && mine && (
+          <ShareWin
+            kind="winner"
+            gloop={mine.avatar}
+            face="cool"
+            tag="WINNER"
+            headline={`${mine.name} took it all`}
+            detail={[
+              `${mine.chips.toLocaleString()} chips`,
+              ranking.length > 1 && `beat ${ranking.length - 1} friend${ranking.length > 2 ? "s" : ""}`,
+              room.game?.handNumber && `${room.game.handNumber} hand${room.game.handNumber === 1 ? "" : "s"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            footer={`Table ${room.code} · ${typeof window !== "undefined" ? window.location.host : "gloopy"}`}
+            onClose={() => setSharing(false)}
+          />
+        )}
         <p className="mt-3 text-center text-xs text-ink/60">This table closes 15 minutes after the game, or when everyone has left.</p>
       </div>
     </div>
