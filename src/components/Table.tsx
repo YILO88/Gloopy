@@ -5,6 +5,7 @@ import { describeHand, evaluateBest } from "@/engine/evaluate";
 import type { PublicRoom } from "@/lib/ops";
 import type { ChatMessage } from "@/lib/client/useRoom";
 import { sounds, isMuted, setMuted } from "@/lib/client/sound";
+import { currentMotion, setMotion, type Motion } from "@/lib/client/motion";
 import { Gloop, Face } from "./Gloop";
 import { PlayingCard } from "./PlayingCard";
 import { Chat } from "./Chat";
@@ -92,6 +93,10 @@ export function Table(props: {
     return () => ro.disconnect();
   }, []);
   const [ready, setReady] = useState(false);
+  // A brand-new game (opened right as it starts): hold the cards back for a moment, then deal them in,
+  // instead of showing them already in place. (Opening mid-hand still shows the table as it is.)
+  const [fresh] = useState(() => room.game!.handNumber === 1 && serverNow() - room.game!.startedAt < 3000);
+  const holdDeal = fresh && !ready;
   useEffect(() => {
     const t = setTimeout(() => setReady(true), 400);
     return () => clearTimeout(t);
@@ -106,6 +111,8 @@ export function Table(props: {
   const [muted, setMutedState] = useState(false);
   const [copied, setCopied] = useState(false);
   useEffect(() => setMutedState(isMuted()), []);
+  const [motion, setMotionState] = useState<Motion>("full");
+  useEffect(() => setMotionState(currentMotion()), []);
 
   const mySeat = g.seats.find((s) => s.id === me);
   // My move shows instantly while the server confirms it, so the table never feels stuck.
@@ -119,7 +126,7 @@ export function Table(props: {
   const watchers = room.members.filter((m) => !g.seats.some((s) => s.id === m.id && s.status === "playing")).length;
 
   // Card sounds: a "thwip" per card dealt at the start of a hand, and per card turned on the board.
-  const heard = useRef({ hand: g.handNumber, board: g.board.length });
+  const heard = useRef({ hand: fresh ? 0 : g.handNumber, board: g.board.length });
   // Board cards seen before this update (read during render, so new cards know when to come in).
   const boardBefore = heard.current.hand === g.handNumber ? Math.min(heard.current.board, g.board.length) : 0;
   const [bump, setBump] = useState<{ hand: number; at: number } | null>(null);
@@ -332,6 +339,16 @@ export function Table(props: {
                 }}
               >
                 {muted ? "Turn sound on" : "Turn sound off"}
+              </button>
+              <button
+                className="block w-full px-4 py-2.5 text-left hover:bg-white/10"
+                onClick={() => {
+                  const next = motion === "full" ? "calm" : "full";
+                  setMotion(next);
+                  setMotionState(next);
+                }}
+              >
+                {motion === "full" ? "Calm animations" : "Full animations"}
               </button>
               <button
                 className="block w-full px-4 py-2.5 text-left hover:bg-white/10"
@@ -554,6 +571,7 @@ export function Table(props: {
                     toCentre={{ x: ((50 - p.x) / 100) * box.w, y: ((50 - p.y) / 100) * box.h }}
                     payAt={result && ready ? landAt : undefined}
                     lost={!!result?.showdown && !!result.shown[s.id] && !result.won[s.id]}
+                    hold={holdDeal}
                   />
                 );
               })}
@@ -574,6 +592,7 @@ export function Table(props: {
                   dealCount={ordered.length}
                   fromCentre={{ x: 0, y: -box.h * 0.4 }}
                   payAt={result && ready ? landAt : undefined}
+                  hold={holdDeal}
                 />
               )}
             </div>
@@ -785,8 +804,11 @@ function OtherSeat({
   toCentre,
   payAt,
   lost,
+  hold,
 }: {
   seat: PublicSeat;
+  /** Cards about to be dealt: don't show them yet. */
+  hold?: boolean;
   /** When the pot's chips land on this seat (ms), for the winner's glow and count-up. */
   payAt?: number;
   /** Showed down and lost: their cards go dim. */
@@ -841,7 +863,7 @@ function OtherSeat({
               {shown
                 ? // showdown: their cards turn over
                   shown.map((c) => <PlayingCard key={`${g.handNumber}-${c}`} card={c} size="sm" glow={!!won} dim={lost} motion={ready ? "flip" : undefined} />)
-                : seat.inHand && !out
+                : seat.inHand && !out && !hold
                   ? seat.folded
                     ? // folded: cards slide into the middle and vanish (nothing to show if we arrived after)
                       ready &&
@@ -910,6 +932,7 @@ function MySeat({
   pending,
   ready,
   payAt,
+  hold,
   dealCount,
   fromCentre,
 }: {
@@ -924,6 +947,7 @@ function MySeat({
   pending: string | null;
   ready: boolean;
   payAt?: number;
+  hold?: boolean;
   dealCount: number;
   fromCentre: { x: number; y: number };
 }) {
@@ -948,7 +972,7 @@ function MySeat({
 
       <div className={`relative flex items-end ${seat.folded || out ? "opacity-60" : ""}`}>
         <div className="flex gap-1.5">
-          {cards.length === 2 ? (
+          {cards.length === 2 && !hold ? (
             // my two cards fly in from the middle and turn face up
             cards.map((c, k) => (
               <PlayingCard
@@ -961,7 +985,7 @@ function MySeat({
               />
             ))
           ) : seat.inHand && !out ? (
-            // waiting for my cards to arrive: keep the space, show nothing yet
+            // waiting for my cards to arrive (or about to be dealt): keep the space, show nothing yet
             [0, 1].map((k) => <PlayingCard key={k} size="hand" className="opacity-0" />)
           ) : (
             <div className="h-[84px] w-[126px]" />

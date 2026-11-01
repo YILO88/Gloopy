@@ -5,6 +5,7 @@ import "@fontsource/rubik/400.css";
 import "@fontsource/rubik/500.css";
 import "@fontsource/rubik/700.css";
 import "./globals.css";
+import { MotionPref } from "@/components/MotionPref";
 
 export const metadata: Metadata = {
   title: "Gloopy Poker",
@@ -21,7 +22,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <MotionPref />
+        {children}
+      </body>
     </html>
   );
 }

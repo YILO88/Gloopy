@@ -144,10 +144,9 @@ body {
 /* Turn timer ring */
 @keyframes ring { from { stroke-dashoffset: 0; } to { stroke-dashoffset: var(--ring-len); } }
 
-@media (prefers-reduced-motion: reduce) {
-  .wobble, .g-bounce, .g-spin, .g-shake, .g-rain, .g-float, .g-tilt, .pop { animation: none !important; }
-  .pop { opacity: 1; transform: translate(-50%, 0); }
-}
+/* Calm animations (phone's Reduce Motion, or chosen in the table menu): no wobbling Gloops.
+   Stickers and GIFs keep playing: they're the message. */
+.calm-motion .wobble { animation: none !important; }
 
 /* Table room: dark teal with a soft woven pattern (lighter than plain black) */
 .room-bg {
@@ -305,14 +304,30 @@ body {
 .late-in { animation: late-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both; animation-delay: var(--d, 0ms); }
 @keyframes late-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
 
-@media (prefers-reduced-motion: reduce) {
-  .card-deal, .card-flip, .card-flip-late, .card-river, .board-bump, .late-in, .win-ring { animation: none !important; }
-  .win-ring { box-shadow: 0 0 0 4px #ffd23f; }
-  .card-muck { animation: none !important; opacity: 0; }
-  .chip-fly, .chip-stream, .burst { display: none; }
+/* Calm animations: nothing flies or spins, but you still see every moment as a soft fade —
+   cards fade in, the river fades in last, chips fade in on the winner, the winner's ring glows. */
+.calm-motion .card-deal, .calm-motion .card-river { animation: calm-in 320ms ease-out both !important; animation-delay: var(--d, 0ms) !important; }
+.calm-motion .card-river { animation-duration: 600ms !important; animation-delay: calc(var(--d, 0ms) + 500ms) !important; }
+.calm-motion .card-flip, .calm-motion .card-flip-late, .calm-motion .card-flip-river { animation: none !important; transform: none; }
+.calm-motion .card-muck { animation: calm-out 400ms ease-in forwards !important; animation-delay: var(--d, 0ms) !important; }
+.calm-motion .board-bump { animation: none !important; }
+.calm-motion .burst { display: none; }
+.calm-motion .chip-stream { animation: calm-chip 700ms ease-out both !important; animation-delay: var(--d, 0ms) !important; }
+.calm-motion .win-ring { animation: calm-ring 500ms ease-out both !important; animation-delay: var(--d, 0ms) !important; }
+.calm-motion .late-in { animation: calm-in 300ms ease-out both !important; animation-delay: var(--d, 0ms) !important; }
+@keyframes calm-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes calm-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes calm-chip {
+  0% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty) - 14px)); opacity: 0; }
+  40% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))); opacity: 0; }
+}
+@keyframes calm-ring {
+  from { box-shadow: 0 0 0 0 rgba(255, 210, 63, 0); }
+  to { box-shadow: 0 0 0 4px #ffd23f, 0 0 14px 2px rgba(255, 210, 63, 0.45); }
 }
 
 /* Message banner sliding down from the top, like a phone notification */
 .toast-in { animation: toast-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
 @keyframes toast-in { from { transform: translateY(-120%); opacity: 0; } to { transform: none; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .toast-in { animation: none; } }
+.calm-motion .toast-in { animation: calm-in 200ms ease-out both; }
