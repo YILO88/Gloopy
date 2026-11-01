@@ -230,10 +230,86 @@ body {
   100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.8); opacity: 0; }
 }
 
+/* The last card (river): flies in big and face down, hangs for a moment, flips, then settles into place. */
+.card-river {
+  position: relative;
+  z-index: 15;
+  animation: card-river 1500ms cubic-bezier(0.3, 0.7, 0.2, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes card-river {
+  0% { transform: translate(60px, -110px) scale(1.95) rotate(14deg); opacity: 0; }
+  12% { transform: translate(10px, -62px) scale(1.8) rotate(3deg); opacity: 1; }
+  30% { transform: translate(10px, -64px) scale(1.82) rotate(-2deg); }
+  46% { transform: translate(10px, -62px) scale(1.8) rotate(1.5deg); }
+  76% { transform: translate(10px, -62px) scale(1.8) rotate(0deg); }
+  92% { transform: translate(0, 0) scale(0.94); }
+  100% { transform: none; opacity: 1; }
+}
+.card-flip-river {
+  animation-duration: 450ms;
+  animation-delay: calc(var(--d, 0ms) + 700ms);
+}
+/* The other board cards bump when the river lands. */
+.board-bump { animation: board-bump 380ms ease-out both; animation-delay: var(--bd, 0ms); }
+@keyframes board-bump {
+  0%, 100% { transform: none; }
+  40% { transform: translateY(-5px) rotate(-2deg) scale(1.04); }
+  70% { transform: translateY(1px) rotate(1deg); }
+}
+
+/* A burst of short gold rays (river landing, winner). */
+.burst { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; z-index: 16; }
+.burst i {
+  position: absolute;
+  left: -2px;
+  top: -8px;
+  width: 4px;
+  height: 16px;
+  border-radius: 3px;
+  background: #ffd23f;
+  box-shadow: 0 0 6px rgba(255, 210, 63, 0.8);
+  opacity: 0;
+  animation: burst-ray 650ms ease-out both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes burst-ray {
+  0% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--r) * -0.45)) scaleY(0.5); }
+  8% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--r) * -1.05)) scaleY(1.2); }
+}
+
+/* Pot to winner: a stream of chips, one after another, on a small arc. */
+.chip-stream {
+  position: absolute;
+  z-index: 20;
+  pointer-events: none;
+  opacity: 0;
+  animation: chip-stream 620ms cubic-bezier(0.4, 0.1, 0.3, 1) both;
+  animation-delay: var(--d, 0ms);
+}
+@keyframes chip-stream {
+  0% { transform: translate(-50%, -50%) scale(1.1); opacity: 0; }
+  10% { opacity: 1; }
+  50% { transform: translate(calc(-50% + var(--tx) * 0.5), calc(-50% + var(--ty) * 0.5 - 28px)) scale(1); }
+  90% { opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty))) scale(0.75); opacity: 0; }
+}
+/* Winner: gold ring pops when the chips land; the WIN tag appears at the same moment. */
+.win-ring { animation: win-ring 700ms ease-out both; animation-delay: var(--d, 0ms); }
+@keyframes win-ring {
+  0% { box-shadow: 0 0 0 0 rgba(255, 210, 63, 0); }
+  35% { box-shadow: 0 0 0 7px #ffd23f, 0 0 24px 10px rgba(255, 210, 63, 0.7); transform: scale(1.12); }
+  100% { box-shadow: 0 0 0 4px #ffd23f, 0 0 14px 2px rgba(255, 210, 63, 0.45); transform: none; }
+}
+.late-in { animation: late-in 260ms cubic-bezier(0.2, 0.9, 0.3, 1.3) both; animation-delay: var(--d, 0ms); }
+@keyframes late-in { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+
 @media (prefers-reduced-motion: reduce) {
-  .card-deal, .card-flip, .card-flip-late { animation: none !important; }
+  .card-deal, .card-flip, .card-flip-late, .card-river, .board-bump, .late-in, .win-ring { animation: none !important; }
+  .win-ring { box-shadow: 0 0 0 4px #ffd23f; }
   .card-muck { animation: none !important; opacity: 0; }
-  .chip-fly { display: none; }
+  .chip-fly, .chip-stream, .burst { display: none; }
 }
 
 /* Message banner sliding down from the top, like a phone notification */

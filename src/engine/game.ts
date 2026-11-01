@@ -68,6 +68,24 @@ export function validateSettings(s: Settings): string | null {
 // Owner's rule: cards stay fully on screen for 3 seconds. The pause adds the time the cards take to turn over.
 export const REVEAL_MS = 800; // longest turn-over animation (river + showdown flips)
 export const PAUSE_AFTER_SHOWDOWN_MS = 3000 + REVEAL_MS; // see the board and everyone's cards for 3s
+// Board timing, shared by the server (pauses) and the screen (animations).
+export const FLOP_STAGGER_MS = 170; // between the three flop cards
+export const DEAL_STAGE_MS = 650; // between flop, turn and river when the board runs out all at once
+export const RIVER_REVEAL_MS = 1500; // the last card: flies in big, hangs, flips, settles
+const stageOf = (i: number) => (i < 3 ? 0 : i === 3 ? 1 : 2);
+/** When board card `i` starts appearing, if the screen last showed `before` board cards. */
+export function boardCardDelay(i: number, before: number) {
+  return (stageOf(i) - stageOf(Math.min(before, i))) * DEAL_STAGE_MS + (i < 3 ? i * FLOP_STAGGER_MS : 0);
+}
+/** How long it takes to show the board going from `before` to `after` cards. */
+export function boardRevealMs(before: number, after: number) {
+  if (after <= before) return 0;
+  const last = after - 1;
+  const stageLength = last === 4 ? RIVER_REVEAL_MS : last === 3 ? 950 : 2 * FLOP_STAGGER_MS + 850;
+  return boardCardDelay(last, before) - (last < 3 ? last * FLOP_STAGGER_MS : 0) + stageLength;
+}
+/** Pause after a showdown: the cards turn over, then stay fully visible for 3 seconds. */
+export const showdownPauseMs = (boardReveal: number) => 3000 + Math.max(REVEAL_MS, boardReveal);
 export const PAUSE_AFTER_FOLD_MS = 3500; // see the board, and time for the winner to tap "Show my cards"
 export const SHOWN_CARDS_MS = 2500; // after "Show my cards", everyone gets at least this long to see them
 export const MAX_PAUSE_MS = 5000; // ...but the next hand never waits longer than this in total
@@ -119,6 +137,8 @@ export interface HandResult {
   won: Record<string, number>;
   uncalled?: { id: string; amount: number };
   showdown: boolean;
+  /** How long the screen spends turning cards over before the pot moves (ms). */
+  revealMs?: number;
 }
 
 export type Street = "preflop" | "flop" | "turn" | "river" | "complete";
@@ -463,6 +483,7 @@ function nextStreet(h: Hand) {
 /** Moves the hand forward after an action (or at the start of a hand). */
 function progressMut(state: GameState, now: number, lastActor: string): GameState {
   const h = state.hand!;
+  let reveal = 0; // the river's slow reveal doesn't eat into the next player's time
   for (;;) {
     const live = inHand(h);
     if (live.length === 1) {
@@ -472,18 +493,20 @@ function progressMut(state: GameState, now: number, lastActor: string): GameStat
     const next = nextToAct(h, lastActor);
     if (next) {
       h.toAct = next;
-      h.deadline = now + state.settings.turnSeconds * 1000;
+      h.deadline = now + reveal + state.settings.turnSeconds * 1000;
       return state;
     }
     // Betting round is over.
     const canBet = live.filter((id) => !h.seats[id].allIn);
     if (h.street === "river" || canBet.length <= 1) {
       // Run out the board if players are all in, then show down.
+      const before = h.board.length;
       while (h.street !== "river") nextStreet(h);
-      settleMut(state, now, true);
+      settleMut(state, now, true, boardRevealMs(before, h.board.length));
       return state;
     }
     nextStreet(h);
+    if ((h.street as Street) === "river") reveal = RIVER_REVEAL_MS;
     lastActor = h.buttonId; // first to act after the flop: left of the button
   }
 }
@@ -519,11 +542,12 @@ export function buildPots(seats: HandSeat[]): { pots: Pot[]; uncalled?: { id: st
   return { pots, uncalled };
 }
 
-function settleMut(state: GameState, now: number, showdown: boolean) {
+function settleMut(state: GameState, now: number, showdown: boolean, boardReveal = 0) {
   const h = state.hand!;
   const seats = h.order.map((id) => h.seats[id]);
   const { pots, uncalled } = buildPots(seats);
   const result: HandResult = { pots, shown: {}, won: {}, uncalled, showdown };
+  if (showdown) result.revealMs = Math.max(REVEAL_MS, boardReveal);
   if (uncalled) player(state, uncalled.id).chips += uncalled.amount;
 
   const live = inHand(h);
@@ -581,7 +605,7 @@ function settleMut(state: GameState, now: number, showdown: boolean) {
   if (dealable(state).length < 2 || timeUp) {
     finishMut(state, now);
   } else {
-    state.nextHandAt = now + (showdown ? PAUSE_AFTER_SHOWDOWN_MS : PAUSE_AFTER_FOLD_MS);
+    state.nextHandAt = now + (showdown ? showdownPauseMs(boardReveal) : PAUSE_AFTER_FOLD_MS);
   }
 }
 

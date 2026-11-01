@@ -105,8 +105,8 @@ export const sounds = {
     tone(1320, 0.12, 0.2, "sine", 0.1);
   },
   /** Chips going into the pot. */
-  chip() {
-    play("chip", 0, 0.5);
+  chip(delayMs = 0) {
+    play("chip", delayMs, 0.5);
   },
   /** The pot sliding to the winner. */
   pot(delayMs = 0) {

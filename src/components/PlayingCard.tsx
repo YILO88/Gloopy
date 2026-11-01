@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from "react";
+import { Burst } from "./Burst";
 
 const SUIT: Record<string, { sym: string; red: boolean; name: string }> = {
   s: { sym: "♠", red: false, name: "spades" },
@@ -35,8 +36,9 @@ const BACK_STYLE: CSSProperties = {
  *  - "flip": turns over from face-down to face-up
  *  - "dealflip": slides in face-down, then turns over (your own cards, board cards)
  *  - "muck": a folded hand sliding into the middle and disappearing
+ *  - "river": the last board card: flies in big and face down, hangs, flips, then settles with a burst
  */
-export type CardMotion = "deal" | "flip" | "dealflip" | "muck";
+export type CardMotion = "deal" | "flip" | "dealflip" | "muck" | "river";
 
 /** A playing card. `card` like "As"; omit it for a face-down card. */
 export function PlayingCard({
@@ -78,6 +80,18 @@ export function PlayingCard({
   const front = card ? <Face card={card} /> : back;
   const lift = glow ? "-translate-y-2 ring-[3px] ring-[#ffd23f]" : "";
   const shade = dim ? "brightness-[.55]" : "";
+
+  if (motion === "river") {
+    return (
+      <div className={`${dims} ${className} relative select-none [perspective:900px] card-river ${shade} ${lift}`} style={vars} aria-label={card ? cardLabel(card) : "face-down card"} role="img">
+        <div className="card-flip card-flip-river absolute inset-0 rounded-[inherit] shadow-[0_6px_16px_rgba(0,0,0,.45)] [transform-style:preserve-3d]">
+          <div className="absolute inset-0 rounded-[inherit] [backface-visibility:hidden]">{front}</div>
+          <div className="absolute inset-0 rounded-[inherit] [backface-visibility:hidden] [transform:rotateY(180deg)]">{back}</div>
+        </div>
+        <Burst delay={delay + 1380} radius={62} />
+      </div>
+    );
+  }
 
   if (motion === "flip" || motion === "dealflip") {
     // Two faces on a turning card: back shows first, then it flips to the front.

@@ -25,3 +25,8 @@ export function ChipAmount({ amount, className = "", size = 14, seed = 0 }: { am
     </span>
   );
 }
+
+/** One chip on its own (for chips flying across the table). */
+export function Chip({ size = 18, seed = 0 }: { size?: number; seed?: number }) {
+  return <ChipStack count={1} size={size} seed={seed} />;
+}

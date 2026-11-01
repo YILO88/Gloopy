@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { PAUSE_AFTER_FOLD_MS, type Action, type PublicSeat } from "@/engine/game";
+import { PAUSE_AFTER_FOLD_MS, REVEAL_MS, boardCardDelay, type Action, type PublicSeat } from "@/engine/game";
 import { describeHand, evaluateBest } from "@/engine/evaluate";
 import type { PublicRoom } from "@/lib/ops";
 import type { ChatMessage } from "@/lib/client/useRoom";
@@ -9,7 +9,8 @@ import { Gloop, Face } from "./Gloop";
 import { PlayingCard } from "./PlayingCard";
 import { Chat } from "./Chat";
 import { GifArt, StickerArt } from "./Sticker";
-import { ChipAmount, ChipStack } from "./Chips";
+import { Chip, ChipAmount, ChipStack } from "./Chips";
+import { Burst } from "./Burst";
 import { RulesModal } from "./Rules";
 import { ShareWin } from "./ShareWin";
 
@@ -119,6 +120,9 @@ export function Table(props: {
 
   // Card sounds: a "thwip" per card dealt at the start of a hand, and per card turned on the board.
   const heard = useRef({ hand: g.handNumber, board: g.board.length });
+  // Board cards seen before this update (read during render, so new cards know when to come in).
+  const boardBefore = heard.current.hand === g.handNumber ? Math.min(heard.current.board, g.board.length) : 0;
+  const [bump, setBump] = useState<{ hand: number; at: number } | null>(null);
   useEffect(() => {
     const h = heard.current;
     if (g.handNumber !== h.hand) {
@@ -128,7 +132,15 @@ export function Table(props: {
       h.board = 0;
     }
     if (g.board.length > h.board) {
-      for (let i = h.board; i < g.board.length; i++) sounds.flip((i < 3 ? i * 170 : 0) + 120);
+      for (let i = h.board; i < g.board.length; i++) {
+        const d = boardCardDelay(i, h.board);
+        if (i === 4) {
+          sounds.card(d); // swoops in face down…
+          sounds.flip(d + 750); // …turns over
+          sounds.flip(d + 1350); // …and lands
+          setBump({ hand: g.handNumber, at: d + 1330 });
+        } else sounds.flip(d + 120);
+      }
       h.board = g.board.length;
     }
   }, [g.handNumber, g.board.length, g.seats]);
@@ -217,6 +229,10 @@ export function Table(props: {
   const timeLeft = g.settings.endMode === "timed" ? g.startedAt + g.settings.timeLimitMin * 60000 - now : null;
 
   const result = g.street === "complete" ? g.result : null;
+  // Pot → winner timing (ms after the result arrives): cards finish turning over, then the chips stream across.
+  const payAt = result ? (result.showdown ? (result.revealMs ?? REVEAL_MS) : 0) + 200 : 0;
+  const landAt = payAt + CHIPS_PER_WIN * CHIP_GAP_MS + 450;
+  const potShown = useTween(g.pot, result && ready ? 0 : g.pot, payAt, CHIPS_PER_WIN * CHIP_GAP_MS + 500, result && ready ? `pot-${g.handNumber}` : `pot-${g.pot}`);
   const winningCards = useMemo(() => {
     if (!result?.showdown) return new Set<string>();
     const w = result.pots[0]?.winners ?? [];
@@ -228,7 +244,9 @@ export function Table(props: {
   useEffect(() => {
     if (!result || !ready || potHeard.current === g.handNumber) return;
     potHeard.current = g.handNumber;
-    sounds.pot(250);
+    sounds.pot(payAt + 150);
+    sounds.chip(landAt - 100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, ready, g.handNumber]);
 
   // Big win (Flush or better, cards face up): offer "Share" for a few seconds.
@@ -453,21 +471,26 @@ export function Table(props: {
               {/* pot + board */}
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                 <div className="text-lg font-bold text-[#ffd86b] drop-shadow" aria-label="Pot">
-                  {g.pot > 0 ? <ChipAmount amount={g.pot} size={18} /> : <span className="opacity-0">0</span>}
+                  {potShown > 0 ? <ChipAmount amount={potShown} size={18} /> : <span className="opacity-0">0</span>}
                 </div>
                 <div className="flex gap-1 sm:gap-1.5" aria-label="Board">
                   {Array.from({ length: 5 }).map((_, i) =>
                     g.board[i] ? (
-                      <PlayingCard
+                      <div
                         key={`${g.handNumber}-${i}`}
-                        card={g.board[i]}
-                        size="board"
-                        glow={winningCards.has(g.board[i])}
-                        dim={winningCards.size > 0 && !winningCards.has(g.board[i])}
-                        motion={ready ? "dealflip" : undefined}
-                        delay={i < 3 ? i * 170 : 0}
-                        from={{ x: -30 - (i < 3 ? i : 0) * 56, y: -24 }}
-                      />
+                        className={bump?.hand === g.handNumber && i < 4 ? "board-bump" : ""}
+                        style={bump ? ({ ["--bd" as string]: `${bump.at + i * 45}ms` } as React.CSSProperties) : undefined}
+                      >
+                        <PlayingCard
+                          card={g.board[i]}
+                          size="board"
+                          glow={winningCards.has(g.board[i])}
+                          dim={winningCards.size > 0 && !winningCards.has(g.board[i])}
+                          motion={ready ? (i === 4 ? "river" : "dealflip") : undefined}
+                          delay={boardCardDelay(i, boardBefore)}
+                          from={{ x: -30 - (i < 3 ? i : 0) * 56, y: -24 }}
+                        />
+                      </div>
                     ) : (
                       <div key={i} className="h-[70px] w-[50px] rounded-[7px] border-2 border-dashed border-white/15 sm:h-[90px] sm:w-[64px]" />
                     ),
@@ -475,22 +498,29 @@ export function Table(props: {
                 </div>
               </div>
 
+              {/* pot → winner: a stream of chips, one after another */}
               {result &&
                 ready &&
                 Object.keys(result.won).map((id) => {
                   const i = ordered.findIndex((s) => s.id === id);
                   if (i < 0) return null;
                   const p = id === me && ordered[0]?.id === me ? { x: 50, y: 90 } : seatPoint(i, ordered.length);
-                  return (
+                  return Array.from({ length: CHIPS_PER_WIN }).map((_, k) => (
                     <div
-                      key={`${g.handNumber}-${id}`}
-                      className="chip-fly pointer-events-none absolute left-1/2 top-[40%] z-20"
-                      style={{ ["--tx" as string]: `${((p.x - 50) / 100) * box.w}px`, ["--ty" as string]: `${((p.y - 40) / 100) * box.h}px` }}
+                      key={`${g.handNumber}-${id}-${k}`}
+                      className="chip-stream left-1/2 top-[40%]"
+                      style={
+                        {
+                          ["--tx" as string]: `${((p.x - 50) / 100) * box.w}px`,
+                          ["--ty" as string]: `${((p.y - 40) / 100) * box.h}px`,
+                          ["--d" as string]: `${payAt + k * CHIP_GAP_MS}ms`,
+                        } as React.CSSProperties
+                      }
                       aria-hidden
                     >
-                      <ChipStack count={5} size={22} />
+                      <Chip size={20} seed={k} />
                     </div>
-                  );
+                  ));
                 })}
 
               {pops.watcher && (
@@ -522,6 +552,8 @@ export function Table(props: {
                     dealIndex={i}
                     dealCount={ordered.length}
                     toCentre={{ x: ((50 - p.x) / 100) * box.w, y: ((50 - p.y) / 100) * box.h }}
+                    payAt={result && ready ? landAt : undefined}
+                    lost={!!result?.showdown && !!result.shown[s.id] && !result.won[s.id]}
                   />
                 );
               })}
@@ -541,6 +573,7 @@ export function Table(props: {
                   ready={ready}
                   dealCount={ordered.length}
                   fromCentre={{ x: 0, y: -box.h * 0.4 }}
+                  payAt={result && ready ? landAt : undefined}
                 />
               )}
             </div>
@@ -648,11 +681,53 @@ export function Table(props: {
   );
 }
 
+// ------------------------------------------------------------------ pot to winner
+
+const CHIPS_PER_WIN = 8;
+const CHIP_GAP_MS = 55;
+
+/** A number that glides from `from` to `to` (chips counting up or down). Restarts only when `key` changes. */
+function useTween(from: number, to: number, delay: number, duration: number, key: string) {
+  const [v, setV] = useState(from);
+  useEffect(() => {
+    if (from === to) return setV(to);
+    setV(from);
+    let raf = 0;
+    const start = performance.now() + delay;
+    const tick = (t: number) => {
+      const p = Math.min(1, Math.max(0, (t - start) / duration));
+      setV(Math.round(from + (to - from) * (1 - (1 - p) ** 3)));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return v;
+}
+
+/** A seat's chip count: when they've just won, it counts up as the pot's chips land. */
+function SeatChips({ seat, won, at, hand, size }: { seat: PublicSeat; won?: number; at?: number; hand: number; size: number }) {
+  const paying = !!won && at !== undefined;
+  const v = useTween(paying ? seat.chips - won! : seat.chips, seat.chips, at ?? 0, 600, paying ? `win-${hand}` : `c-${seat.chips}`);
+  return <ChipAmount amount={v} size={size} />;
+}
+
+/** Gold ring + burst on the winner's avatar, timed to the chips landing. */
+function WinGlow({ at, radius }: { at: number; radius: number }) {
+  return (
+    <>
+      <span className="win-ring pointer-events-none absolute inset-0 rounded-full" style={{ ["--d" as string]: `${at}ms` } as React.CSSProperties} aria-hidden />
+      <Burst delay={at} radius={radius} />
+    </>
+  );
+}
+
 // ------------------------------------------------------------------ seats
 
 function TimerRing({ g, now, size }: { g: Game; now: number; size: number }) {
   if (!g.deadline) return null;
-  const frac = Math.max(0, g.deadline - now) / (g.settings.turnSeconds * 1000);
+  const frac = Math.min(1, Math.max(0, g.deadline - now) / (g.settings.turnSeconds * 1000));
   const r = size / 2 - 3;
   const L = 2 * Math.PI * r;
   return (
@@ -708,8 +783,14 @@ function OtherSeat({
   dealIndex,
   dealCount,
   toCentre,
+  payAt,
+  lost,
 }: {
   seat: PublicSeat;
+  /** When the pot's chips land on this seat (ms), for the winner's glow and count-up. */
+  payAt?: number;
+  /** Showed down and lost: their cards go dim. */
+  lost?: boolean;
   x: number;
   y: number;
   ready: boolean;
@@ -748,7 +829,8 @@ function OtherSeat({
               <StickerArt id={pop} size={70} />
             </div>
           )}
-          <div className={`relative rounded-full ${won ? "ring-4 ring-[#ffd23f]" : ""}`}>
+          <div className={`relative rounded-full ${won && payAt === undefined ? "ring-4 ring-[#ffd23f]" : ""}`}>
+            {won && payAt !== undefined && <WinGlow at={payAt} radius={42} />}
             {toAct && <TimerRing g={g} now={now} size={60} />}
             <Gloop id={seat.avatar} face={faceFor(seat, won)} size={48} title={seat.name} />
             {seat.isButton && (
@@ -758,7 +840,7 @@ function OtherSeat({
             <div className={`absolute flex -space-x-3 ${shown ? "-bottom-2 -right-7" : "-bottom-1 -right-3"} ${x > 55 && !shown ? "!-left-3 !right-auto" : ""}`}>
               {shown
                 ? // showdown: their cards turn over
-                  shown.map((c) => <PlayingCard key={`${g.handNumber}-${c}`} card={c} size="sm" glow={!!won} motion={ready ? "flip" : undefined} />)
+                  shown.map((c) => <PlayingCard key={`${g.handNumber}-${c}`} card={c} size="sm" glow={!!won} dim={lost} motion={ready ? "flip" : undefined} />)
                 : seat.inHand && !out
                   ? seat.folded
                     ? // folded: cards slide into the middle and vanish (nothing to show if we arrived after)
@@ -786,10 +868,10 @@ function OtherSeat({
             <span className="truncate">{seat.name}</span>
           </div>
           <div className="text-[11px] text-[#ffe08a]">
-            {out ? <span className="text-dim">{seat.status === "kicked" ? "Left" : "Out"}</span> : <ChipAmount amount={seat.chips} size={11} />}
+            {out ? <span className="text-dim">{seat.status === "kicked" ? "Left" : "Out"}</span> : <SeatChips seat={seat} won={won} at={payAt} hand={g.handNumber} size={11} />}
           </div>
           {side && won ? (
-            <span className="action-tag mt-0.5 px-2 py-0.5 text-[11px]" style={{ ["--tag" as string]: "#ffd23f" }}>
+            <span className="action-tag late-in mt-0.5 px-2 py-0.5 text-[11px]" style={{ ["--tag" as string]: "#ffd23f", ["--d" as string]: `${payAt ?? 0}ms` } as React.CSSProperties}>
               WIN +{won.toLocaleString()}
             </span>
           ) : (
@@ -802,7 +884,7 @@ function OtherSeat({
       {/* action tag / win tag toward the centre */}
       <div className="absolute z-[5] -translate-x-1/2 -translate-y-1/2" style={{ left: `${tx}%`, top: `${ty + (above ? -1 : 1)}%` }}>
         {side ? null : won ? (
-          <div className="flex flex-col items-center gap-0.5">
+          <div className="late-in flex flex-col items-center gap-0.5" style={{ ["--d" as string]: `${payAt ?? 0}ms` } as React.CSSProperties}>
             <span className="action-tag px-3 py-0.5 text-xs" style={{ ["--tag" as string]: "#ffd23f" }}>
               WIN +{won.toLocaleString()}
             </span>
@@ -827,6 +909,7 @@ function MySeat({
   host,
   pending,
   ready,
+  payAt,
   dealCount,
   fromCentre,
 }: {
@@ -840,6 +923,7 @@ function MySeat({
   host: boolean;
   pending: string | null;
   ready: boolean;
+  payAt?: number;
   dealCount: number;
   fromCentre: { x: number; y: number };
 }) {
@@ -853,7 +937,7 @@ function MySeat({
         </div>
       )}
       {won ? (
-        <span className="action-tag mb-1 px-3 py-0.5 text-xs" style={{ ["--tag" as string]: "#ffd23f" }}>
+        <span className="action-tag late-in mb-1 px-3 py-0.5 text-xs" style={{ ["--tag" as string]: "#ffd23f", ["--d" as string]: `${payAt ?? 0}ms` } as React.CSSProperties}>
           WIN +{won.toLocaleString()}
         </span>
       ) : (
@@ -884,7 +968,8 @@ function MySeat({
           )}
         </div>
         {/* avatar overlapping the cards, like a real seat */}
-        <div className={`absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full ${won ? "ring-4 ring-[#ffd23f]" : ""}`}>
+        <div className={`absolute -bottom-3 left-1/2 -translate-x-1/2 rounded-full ${won && payAt === undefined ? "ring-4 ring-[#ffd23f]" : ""}`}>
+          {won && payAt !== undefined && <WinGlow at={payAt} radius={40} />}
           {toAct && <TimerRing g={g} now={now} size={56} />}
           <Gloop id={seat.avatar} face={faceFor(seat, won)} size={44} title={seat.name} />
           {seat.isButton && (
@@ -892,7 +977,7 @@ function MySeat({
           )}
         </div>
         <div className="absolute -right-2 bottom-1 translate-x-full text-sm text-[#ffe08a]">
-          {!out && <ChipAmount amount={seat.chips} size={15} />}
+          {!out && <SeatChips seat={seat} won={won} at={payAt} hand={g.handNumber} size={15} />}
         </div>
       </div>
       <div className="mt-4 flex items-center gap-1 text-xs font-semibold">

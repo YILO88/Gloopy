@@ -16,6 +16,9 @@ import {
   skipDisconnected,
   removePlayer,
   showCards,
+  boardRevealMs,
+  DEAL_STAGE_MS,
+  RIVER_REVEAL_MS,
   PAUSE_AFTER_FOLD_MS,
   SHOWN_CARDS_MS,
   MAX_PAUSE_MS,
@@ -161,6 +164,29 @@ describe("betting", () => {
     expect(g.hand!.currentBet).toBe(130);
     expect(legalActions(g, "p1").canRaise).toBe(false); // p1 already acted at this raise level
     expect(legalActions(g, "p1").toCall).toBe(30);
+  });
+
+  it("an all-in run-out waits for the board to finish turning over, then 3 seconds", () => {
+    let g = createGame(settings(), P(2), T0, rng);
+    g = act(g, g.hand!.toAct!, { type: "allin" }, T0);
+    g = act(g, g.hand!.toAct!, { type: "allin" }, T0);
+    expect(g.hand!.board.length).toBe(5);
+    expect(g.hand!.result!.revealMs).toBe(boardRevealMs(0, 5));
+    if (g.status === "playing") expect(g.nextHandAt! - T0).toBe(3000 + boardRevealMs(0, 5));
+    expect(boardRevealMs(0, 5)).toBe(2 * DEAL_STAGE_MS + RIVER_REVEAL_MS);
+    expect(boardRevealMs(4, 5)).toBe(RIVER_REVEAL_MS);
+  });
+
+  it("the river's reveal is added to the next player's clock", () => {
+    let g = createGame(settings(), P(2), T0, rng);
+    const step = () => {
+      const id = g.hand!.toAct!;
+      g = act(g, id, legalActions(g, id).canCheck ? { type: "check" } : { type: "call" }, T0);
+    };
+    while (g.hand!.street !== "river") step();
+    expect(g.hand!.deadline! - T0).toBe(g.settings.turnSeconds * 1000 + RIVER_REVEAL_MS);
+    step();
+    expect(g.hand!.deadline! - T0).toBe(g.settings.turnSeconds * 1000);
   });
 
   it("the big blind gets an option when everyone limps", () => {

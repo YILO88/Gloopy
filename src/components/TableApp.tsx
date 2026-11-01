@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PAUSE_AFTER_SHOWDOWN_MS } from "@/engine/game";
+import { PAUSE_AFTER_SHOWDOWN_MS, showdownPauseMs } from "@/engine/game";
 import { useRoom } from "@/lib/client/useRoom";
 import { loadProfile, saveProfile } from "@/lib/client/api";
 import { sounds } from "@/lib/client/sound";
@@ -14,7 +14,7 @@ import { Results } from "./Results";
 import { Table } from "./Table";
 
 /** How long the final hand stays on screen before the leaderboard appears: as long as any other hand. */
-const RESULTS_DELAY_MS = PAUSE_AFTER_SHOWDOWN_MS;
+const resultsDelayMs = (reveal?: number) => (reveal ? showdownPauseMs(reveal) : PAUSE_AFTER_SHOWDOWN_MS);
 
 export function TableApp({ code }: { code: string }) {
   const router = useRouter();
@@ -22,15 +22,16 @@ export function TableApp({ code }: { code: string }) {
   const { room, me, serverNow } = r;
   // Let everyone see the last hand (board, winner, shown cards) before the leaderboard covers it.
   const finishedAt = room?.phase === "results" ? room.game?.finishedAt ?? null : null;
+  const lastReveal = room?.game?.result?.revealMs;
   const [resultsReady, setResultsReady] = useState(false);
   useEffect(() => {
     if (finishedAt === null) return setResultsReady(false);
-    const wait = finishedAt + RESULTS_DELAY_MS - serverNow();
+    const wait = finishedAt + resultsDelayMs(lastReveal) - serverNow();
     if (wait <= 0) return setResultsReady(true);
     setResultsReady(false);
     const t = setTimeout(() => setResultsReady(true), wait);
     return () => clearTimeout(t);
-  }, [finishedAt, serverNow]);
+  }, [finishedAt, serverNow, lastReveal]);
 
   const leave = async () => {
     await r.leave();
