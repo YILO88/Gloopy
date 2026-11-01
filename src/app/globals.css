@@ -151,21 +151,19 @@ body {
 }
 
 /* Table room: dark teal with a soft woven pattern (lighter than plain black) */
-/* The table's room: a dim private card room at midnight, seen from above.
-   Plum wood floor, a violet glow over the table, armchairs and lamps fading into the corners.
-   Drawings live in /public/table (original art). */
+/* The table's room: the Gloopy dot pattern in deep midnight plum, just visible,
+   with a violet glow over the table and dark edges. */
 .room-bg {
-  --corner: clamp(190px, 30vw, 420px);
-  background-color: #0b0614;
+  background-color: #140b26;
   background-image:
-    radial-gradient(ellipse 72% 68% at 50% 48%, transparent 0%, transparent 38%, rgba(6, 2, 16, 0.66) 72%, rgba(4, 0, 12, 0.94) 100%),
-    radial-gradient(ellipse 55% 45% at 50% 48%, rgba(150, 110, 255, 0.34) 0%, rgba(110, 70, 220, 0.13) 50%, transparent 75%),
-    url("/table/corner-tl.svg"), url("/table/corner-tr.svg"), url("/table/corner-bl.svg"), url("/table/corner-br.svg"),
-    url("/table/grain.svg"),
-    url("/table/floor.svg");
-  background-size: auto, auto, var(--corner) var(--corner), var(--corner) var(--corner), var(--corner) var(--corner), var(--corner) var(--corner), 180px 180px, 480px 96px;
-  background-position: 0 0, 0 0, left top, right top, left bottom, right bottom, 0 0, 0 0;
-  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat, repeat;
+    radial-gradient(ellipse 72% 68% at 50% 48%, transparent 0%, transparent 38%, rgba(6, 2, 16, 0.62) 72%, rgba(4, 0, 12, 0.92) 100%),
+    radial-gradient(ellipse 55% 45% at 50% 48%, rgba(150, 110, 255, 0.3) 0%, rgba(110, 70, 220, 0.115) 50%, transparent 75%),
+    radial-gradient(circle at 25% 25%, rgba(190, 160, 255, 0.045) 0 22%, transparent 23%),
+    radial-gradient(circle at 75% 75%, rgba(190, 160, 255, 0.045) 0 22%, transparent 23%),
+    radial-gradient(circle at 75% 25%, rgba(0, 0, 0, 0.22) 0 10%, transparent 11%),
+    radial-gradient(circle at 25% 75%, rgba(0, 0, 0, 0.22) 0 10%, transparent 11%);
+  background-size: auto, auto, 44px 44px, 44px 44px, 44px 44px, 44px 44px;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, repeat, repeat;
 }
 
 /* Poker table: walnut rim with a brass line, green felt with an inner betting line */
