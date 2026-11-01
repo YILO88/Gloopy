@@ -39,7 +39,9 @@ export function ShareWin({ gloop, face, onClose, ...card }: Props) {
   const share = async () => {
     if (!file) return;
     try {
-      await navigator.share({ files: [file], title: "Gloopy", text: card.headline });
+      // Picture only: adding a title or text hides apps that only take images (Snapchat, Instagram),
+      // and iPhones drop the picture when text comes with it.
+      await navigator.share({ files: [file] });
     } catch {}
   };
   const copy = async () => {
