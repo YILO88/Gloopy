@@ -47,15 +47,23 @@ export const STICKERS: Sticker[] = [
 export interface Gif {
   id: string;
   gloop: string;
-  motion: "bounce" | "spin" | "shake" | "rain";
+  /** How the Gloop moves. "rain" drops `emoji` from the top; "float" sends it drifting up. */
+  motion: "bounce" | "spin" | "shake" | "rain" | "float" | "tilt";
   caption: string;
+  face?: "laugh" | "cry" | "shock" | "smug" | "angry" | "love" | "sleep" | "cool";
+  emoji?: string;
+  bg?: string;
 }
 
 export const GIFS: Gif[] = [
-  { id: "dance", gloop: "lime", motion: "bounce", caption: "victory dance" },
-  { id: "spin", gloop: "berry", motion: "spin", caption: "dizzy" },
-  { id: "rage", gloop: "coral", motion: "shake", caption: "rage quit?" },
-  { id: "money", gloop: "sun", motion: "rain", caption: "make it rain" },
+  { id: "dance", gloop: "lime", motion: "bounce", caption: "victory dance", face: "laugh" },
+  { id: "spin", gloop: "berry", motion: "spin", caption: "dizzy", face: "shock" },
+  { id: "rage", gloop: "coral", motion: "shake", caption: "rage quit?", face: "angry" },
+  { id: "money", gloop: "sun", motion: "rain", caption: "make it rain", face: "laugh", emoji: "🪙" },
+  { id: "tears", gloop: "sky", motion: "rain", caption: "bad beat", face: "cry", emoji: "💧", bg: "#e3f2ff" },
+  { id: "fire", gloop: "mint", motion: "rain", caption: "on fire", face: "cool", emoji: "🔥", bg: "#fff1e0" },
+  { id: "zzz", gloop: "night", motion: "float", caption: "wake me up", face: "sleep", emoji: "💤", bg: "#e9ecff" },
+  { id: "hmm", gloop: "grape", motion: "tilt", caption: "hmm… bluff?", face: "smug", emoji: "🤔", bg: "#f1e9ff" },
 ];
 
 export const isSticker = (id: string) => STICKERS.some((s) => s.id === id);

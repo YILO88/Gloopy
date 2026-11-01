@@ -8,7 +8,7 @@ import { sounds, isMuted, setMuted } from "@/lib/client/sound";
 import { Gloop, Face } from "./Gloop";
 import { PlayingCard } from "./PlayingCard";
 import { Chat } from "./Chat";
-import { StickerArt } from "./Sticker";
+import { GifArt, StickerArt } from "./Sticker";
 import { ChipAmount, ChipStack } from "./Chips";
 import { RulesModal } from "./Rules";
 
@@ -171,6 +171,26 @@ export function Table(props: {
     }
   }, [chat, g.seats]);
 
+  // Instagram-style banners: new messages slide in at the top while you play (phones; desktop has the chat panel).
+  const [toasts, setToasts] = useState<ChatMessage[]>([]);
+  const [replyFocus, setReplyFocus] = useState(false);
+  const toasted = useRef(new Set<number>());
+  useEffect(() => {
+    for (const m of chat) {
+      if (toasted.current.has(m.id)) continue;
+      toasted.current.add(m.id);
+      // only new messages from others; stickers already pop over the sender's seat
+      if (m.sender_id === me || m.kind === "sticker" || new Date(m.created_at).getTime() < mountedAt.current - 15000) continue;
+      setToasts((t) => [m, ...t.filter((x) => x.id !== m.id)].slice(0, 2));
+      setTimeout(() => setToasts((t) => t.filter((x) => x.id !== m.id)), 4500);
+    }
+  }, [chat, me]);
+  const openChat = (reply: boolean) => {
+    setReplyFocus(reply);
+    setToasts([]);
+    setChatOpen(true);
+  };
+
   const [readCount, setReadCount] = useState(chat.length);
   useEffect(() => {
     if (chatOpen) setReadCount(chat.length);
@@ -306,6 +326,40 @@ export function Table(props: {
         </div>
       )}
 
+      {!chatOpen && toasts.length > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 top-14 z-40 flex flex-col items-center gap-2 px-3 lg:hidden" aria-live="polite">
+          {toasts.map((m) => (
+            <div
+              key={m.id}
+              className="toast-in pointer-events-auto flex w-full max-w-sm items-center gap-2.5 rounded-2xl border border-white/15 bg-black/35 px-3 py-2 shadow-lg backdrop-blur-md"
+            >
+              <button className="flex min-w-0 flex-1 items-center gap-2.5 text-left" onClick={() => openChat(true)} aria-label={`Reply to ${m.sender_name}`}>
+                <Gloop id={m.avatar} size={34} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-xs font-semibold text-white">
+                    {m.sender_name}
+                    {m.watching && <span className="font-normal text-dim"> · watching</span>}
+                  </span>
+                  <span className="block truncate text-sm text-white/90">{m.kind === "gif" ? "sent a GIF" : m.body}</span>
+                </span>
+                {m.kind === "gif" && (
+                  <span className="shrink-0 overflow-hidden rounded-lg">
+                    <GifArt id={m.body} size={64} />
+                  </span>
+                )}
+              </button>
+              <button
+                className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-white/70 hover:bg-white/10"
+                onClick={() => setToasts((t) => t.filter((x) => x.id !== m.id))}
+                aria-label="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1">
         {/* Table */}
         <div className="relative flex min-w-0 flex-1 flex-col">
@@ -436,7 +490,7 @@ export function Table(props: {
           )}
 
           {/* phone chat bar */}
-          <button className="flex items-center gap-3 bg-black/45 px-4 py-3 text-left lg:hidden" onClick={() => setChatOpen(true)}>
+          <button className="flex items-center gap-3 border-t border-white/10 bg-black/20 px-4 py-3 text-left backdrop-blur-sm lg:hidden" onClick={() => openChat(false)}>
             <span className="text-lime" aria-hidden>
               💬
             </span>
@@ -449,14 +503,17 @@ export function Table(props: {
         </div>
 
         {/* desktop chat */}
-        <aside className="hidden w-[330px] flex-col bg-black/30 lg:flex" aria-label="Chat">
+        <aside className="hidden w-[330px] flex-col border-l border-white/10 bg-black/15 backdrop-blur-sm lg:flex" aria-label="Chat">
           <Chat messages={chat} me={me} onSend={props.onChat} mood="table" className="flex-1" />
         </aside>
       </div>
 
       {chatOpen && (
-        <div className="fixed inset-0 z-30 flex flex-col bg-black/50 lg:hidden" onClick={() => setChatOpen(false)}>
-          <div className="mt-auto flex h-[70dvh] flex-col rounded-t-2xl bg-[#13262a]" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-30 flex flex-col bg-black/10 lg:hidden" onClick={() => setChatOpen(false)}>
+          <div
+            className="mt-auto flex h-[60dvh] flex-col rounded-t-2xl border-t border-white/15 bg-[#0b1816]/45 backdrop-blur-md"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center px-4 py-2">
               <h2 className="flex-1 font-semibold">Chat</h2>
               <button onClick={() => setChatOpen(false)} className="px-2 py-1 text-dim">
@@ -466,6 +523,7 @@ export function Table(props: {
             <Chat
               messages={chat}
               me={me}
+              autoFocus={replyFocus}
               onSend={(kind, body) => {
                 props.onChat(kind, body);
                 if (kind !== "text") setChatOpen(false); // show the table so you see your sticker land
