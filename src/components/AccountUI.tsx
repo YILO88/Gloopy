@@ -83,7 +83,7 @@ export function SignInPanel({ next, onSignedIn }: { next: string; onSignedIn: ()
     setBusy("email");
     setError(null);
     try {
-      setMode(await sendEmailCode(email));
+      setMode(await sendEmailCode(email, next));
     } catch (e) {
       setError((e as Error).message);
     }
@@ -133,13 +133,14 @@ export function SignInPanel({ next, onSignedIn }: { next: string; onSignedIn: ()
             aria-label="Email"
           />
           <button className="btn mt-3 w-full bg-mist py-2 text-lg" disabled={!!busy || !email.trim()} onClick={send}>
-            {busy === "email" ? "Sending…" : "Email me a 6-digit code"}
+            {busy === "email" ? "Sending…" : "Email me a sign-in link"}
           </button>
         </>
       ) : (
         <>
           <p className="mb-2 text-sm">
-            We sent a code to <b>{email}</b>. {DEV && "(Test mode: any 6 digits work.)"}
+            Check <b>{email}</b>. <b>Tap the link</b> in the email on this device, or type the 6-digit code if the email has one.{" "}
+            {DEV && "(Test mode: any 6 digits work.)"}
           </p>
           <input
             className="field w-full text-center font-display text-3xl tracking-[0.4em]"

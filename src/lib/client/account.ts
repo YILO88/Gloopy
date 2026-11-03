@@ -96,18 +96,19 @@ export async function finishSignIn(): Promise<string> {
 }
 
 /** Email: step 1, send a 6-digit code. Returns how to check it in step 2. */
-export async function sendEmailCode(email: string): Promise<"link" | "signin"> {
+export async function sendEmailCode(email: string, next = "/account"): Promise<"link" | "signin"> {
   const clean = email.trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) throw new Error("That email doesn't look right");
   if (DEV) return "link";
   const sb = supabase();
   const { data } = await sb.auth.getSession();
   if (data.session?.user.is_anonymous) {
-    const { error } = await sb.auth.updateUser({ email: clean });
+    // The email has a code (if the template shows one) and a link; either works.
+    const { error } = await sb.auth.updateUser({ email: clean }, { emailRedirectTo: doneUrl(next) });
     if (!error) return "link";
     if (!/already|registered|exists/i.test(error.message)) throw new Error(friendly(error.message));
   }
-  const { error } = await sb.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: true } });
+  const { error } = await sb.auth.signInWithOtp({ email: clean, options: { shouldCreateUser: true, emailRedirectTo: doneUrl(next) } });
   if (error) throw new Error(friendly(error.message));
   return "signin";
 }

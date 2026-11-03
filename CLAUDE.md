@@ -16,7 +16,7 @@ Not building the multi-game infrastructure yet, but don't paint us into a corner
 Next.js + Tailwind on Vercel, Supabase (database, Realtime, anonymous sign-in). Server-authoritative: browsers only read; every move goes through `src/app/api/`. Secret cards live in `room_secrets` (no read policy) and `hole_cards` (own row only).
 
 ## Accounts, friends, leaderboards, bots (shared Gloopy pieces)
-- Guests play as before (anonymous sign-in). Accounts: Discord, Google, 6-digit email code (Apple planned, not built). A guest who signs in keeps the same id (Supabase manual linking).
+- Guests play as before (anonymous sign-in). Accounts: Discord, Google, email (sign-in link; a 6-digit code too once custom SMTP lets us edit the email). Apple planned, not built. A guest who signs in keeps the same id (Supabase manual linking).
 - Tables `profiles`, `friendships`, `game_results` (migration 0003) have no read policies: browsers go through `/api/me`, `/api/friends`, `/api/users/[username]`, `/api/leaderboard`.
 - Profile is Gloopy-wide (totals), with a tab per game; leaderboards are per game (`src/lib/results.ts`, `GAMES`).
 - Leaderboard rules (owner): a win = 1st among people (bots ignored in placing); a game is ranked only with 2+ account holders; solo-with-bots is practice. Bots never appear on boards.
