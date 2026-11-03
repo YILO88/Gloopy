@@ -140,5 +140,6 @@ function friendly(msg: string) {
   if (/provider is not enabled|Unsupported provider/i.test(msg)) return "That sign-in option isn't switched on yet. Try another one.";
   if (/manual linking/i.test(msg)) return "Signing in isn't fully set up yet (manual linking is off in Supabase).";
   if (/rate limit/i.test(msg)) return "Too many emails sent. Wait a few minutes and try again.";
+  if (/not authorized/i.test(msg)) return "Email sign-in isn't set up yet. Use Discord or Google for now.";
   return msg;
 }
