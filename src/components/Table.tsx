@@ -559,7 +559,7 @@ export function Table(props: {
                     y={p.y}
                     g={g}
                     now={now}
-                    online={isOnline(s.id)}
+                    online={!!s.bot || isOnline(s.id)}
                     shown={result?.shown[s.id]?.hole}
                     handName={result?.shown[s.id]?.handName}
                     won={result?.won[s.id]}
@@ -888,6 +888,7 @@ function OtherSeat({
             {host && <span aria-label="Host">👑</span>}
             <span className={`h-2 w-2 shrink-0 rounded-full ${online ? "bg-[#3ddc84]" : "bg-[#ff4d4d]"}`} aria-label={online ? "Online" : "Offline"} />
             <span className="truncate">{seat.name}</span>
+            {seat.bot && <span className="rounded bg-white/15 px-1 text-[9px] font-bold uppercase tracking-wide text-white/80">Bot</span>}
           </div>
           <div className="text-[11px] text-[#ffe08a]">
             {out ? <span className="text-dim">{seat.status === "kicked" ? "Left" : "Out"}</span> : <SeatChips seat={seat} won={won} at={payAt} hand={g.handNumber} size={11} />}

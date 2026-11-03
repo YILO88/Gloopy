@@ -3,20 +3,21 @@ import { secureRng } from "@/engine/cards";
 import { makeRoomCode } from "@/engine/room";
 import { newRoom, toPublic } from "@/lib/ops";
 import { errorResponse, json, readJson } from "@/lib/server/http";
-import { getStore, userFromRequest } from "@/lib/server/supabase";
+import { getStore, seatIdentity } from "@/lib/server/supabase";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request) {
   try {
-    const userId = await userFromRequest(req);
-    if (!userId) return json({ error: "Please reload the page to sign in" }, 401);
+    const who = await seatIdentity(req);
+    if (!who) return json({ error: "Please reload the page to sign in" }, 401);
+    const userId = who.id;
     const body = await readJson(req);
     const store = getStore();
     for (let i = 0; i < 5; i++) {
       const code = makeRoomCode(secureRng);
       const now = Date.now();
-      const room = newRoom(code, userId, body.name, body.avatar, now);
+      const room = newRoom(code, userId, who.name ?? body.name, who.avatar ?? body.avatar, now, who.username);
       if (await store.create(code, room, toPublic(room, now))) {
         return json({ code, room: toPublic(room, now), serverNow: Date.now() });
       }

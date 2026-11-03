@@ -25,7 +25,7 @@ import {
   totalChips,
   HandSeat,
 } from "./game";
-import { backToLobby, createRoom, joinRoom, kickMember, leaveRoom, startGame, syncPhase, updateSettings, waitingQueue } from "./room";
+import { addBots, backToLobby, createRoom, joinRoom, kickMember, leaveRoom, removeBot, startGame, syncPhase, updateSettings, waitingQueue } from "./room";
 
 const rng = seededRng(42);
 const P = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: `P${i}`, avatar: "lime" }));
@@ -573,5 +573,101 @@ describe("showing cards after winning without a showdown", () => {
     expect(late.nextHandAt).toBe(T0 + 2000 + SHOWN_CARDS_MS);
     const veryLate = showCards(g, "p2", T0 + 3400);
     expect(veryLate.nextHandAt).toBe(T0 + MAX_PAUSE_MS);
+  });
+});
+
+describe("computer players (bots)", () => {
+  const withBots = (levels: ("easy" | "normal" | "hard")[]) => [
+    { id: "me", name: "Me", avatar: "lime" },
+    ...levels.map((bot, i) => ({ id: `bot-${i}`, name: `Bot${i}`, avatar: "sky", bot })),
+  ];
+
+  it("bots move on their own when their moment comes, quickly and legally", () => {
+    let g = createGame(settings(), withBots(["normal", "hard"]), T0, rng);
+    let now = T0;
+    for (let i = 0; i < 40 && g.status === "playing"; i++) {
+      const h = g.hand!;
+      if (h.toAct === "me") {
+        g = act(g, "me", legalActions(g, "me").canCheck ? { type: "check" } : { type: "call" }, now);
+        continue;
+      }
+      if (h.toAct) {
+        const bot = g.players.find((p) => p.id === h.toAct)!;
+        expect(bot.bot).toBeTruthy();
+        expect(h.deadline! - now).toBeLessThan(4000); // a bot never sits on the full turn timer
+        now = h.deadline!;
+      } else now = g.nextHandAt ?? now + 1000;
+      g = advance(g, now, rng);
+      expect(g.players.find((p) => p.id.startsWith("bot"))!.strikes).toBe(0); // bots never "miss" turns
+    }
+  });
+
+  it("40 games of one random person against bots: chips are kept and every game ends", () => {
+    const r = seededRng(7);
+    const levels = ["easy", "normal", "hard"] as const;
+    for (let n = 0; n < 40; n++) {
+      const count = 1 + Math.floor(r() * 5);
+      let g = createGame(settings({ startingChips: 5000, blindIntervalSec: 90 }), withBots(Array.from({ length: count }, () => levels[Math.floor(r() * 3)])), T0, r);
+      const total = totalChips(g);
+      let now = T0;
+      for (let step = 0; step < 4000 && g.status === "playing"; step++) {
+        const h = g.hand!;
+        if (h.toAct === "me") {
+          const l = legalActions(g, "me");
+          const roll = r();
+          const a = roll < 0.15 && l.canRaise ? { type: "allin" as const } : roll < 0.25 && !l.canCheck ? { type: "fold" as const } : l.canCheck ? { type: "check" as const } : { type: "call" as const };
+          g = act(g, "me", a, now);
+        } else {
+          now = h.toAct ? h.deadline! : (g.nextHandAt ?? now) + 1;
+          g = advance(g, now, r);
+        }
+        expect(totalChips(g)).toBe(total);
+      }
+      expect(g.status).toBe("finished");
+    }
+  });
+
+  it("when the only person is out, the game ends instead of bots playing on", () => {
+    let g = createGame(settings(), withBots(["easy", "easy"]), T0, rng);
+    g.players.find((p) => p.id === "me")!.chips = 30; // tiny stack
+    let now = T0;
+    for (let step = 0; step < 2000 && g.status === "playing"; step++) {
+      if (g.hand!.toAct === "me") g = act(g, "me", legalActions(g, "me").canRaise ? { type: "allin" } : { type: "call" }, now);
+      else {
+        now = g.hand!.toAct ? g.hand!.deadline! : (g.nextHandAt ?? now) + 1;
+        g = advance(g, now, rng);
+      }
+      if (g.players.find((p) => p.id === "me")!.status !== "playing") break;
+    }
+    const me = g.players.find((p) => p.id === "me")!;
+    if (me.status === "busted") expect(g.status).toBe("finished");
+  });
+
+  it("the host adds and removes bots in the lobby; a game needs at least one person", () => {
+    let room = createRoom("BOTS1", { id: "host", name: "Host", avatar: "lime" }, T0);
+    expect(() => addBots(room, "someone", 1, "easy", T0, rng)).toThrow(/host/);
+    room = addBots(room, "host", 3, "hard", T0, rng);
+    const bots = room.members.filter((m) => m.bot);
+    expect(bots).toHaveLength(3);
+    expect(new Set(room.members.map((m) => m.name)).size).toBe(4); // names never clash
+    room = removeBot(room, "host", bots[0].id);
+    expect(room.members.filter((m) => m.bot)).toHaveLength(2);
+    expect(() => addBots(room, "host", 9, "easy", T0, rng)).toThrow(/empty seat/);
+    room = startGame(room, "host", T0, rng); // solo with bots works
+    expect(room.game!.players.filter((p) => p.bot)).toHaveLength(2);
+    // shrinking seats sends bots home first
+    let r2 = createRoom("BOTS2", { id: "host", name: "Host", avatar: "lime" }, T0);
+    r2 = joinRoom(r2, { id: "pal", name: "Pal", avatar: "sky" }, T0 + 1);
+    r2 = addBots(r2, "host", 2, "easy", T0 + 2, rng);
+    r2 = updateSettings(r2, "host", settings({ maxSeats: 2 }));
+    expect(r2.members.map((m) => m.id).sort()).toEqual(["host", "pal"]);
+  });
+
+  it("a bot decision takes well under a second, even at a full table", () => {
+    let g = createGame(settings(), [{ id: "me", name: "Me", avatar: "lime" }, ...Array.from({ length: 8 }, (_, i) => ({ id: `bot-${i}`, name: `B${i}`, avatar: "sky", bot: "hard" as const }))], T0, rng);
+    while (g.hand!.toAct === "me") g = act(g, "me", { type: "call" }, T0);
+    const t = performance.now();
+    g = advance(g, g.hand!.deadline!, rng);
+    expect(performance.now() - t).toBeLessThan(1000);
   });
 });

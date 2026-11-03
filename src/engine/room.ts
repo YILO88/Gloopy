@@ -3,9 +3,11 @@
  * Pure functions, like the game engine.
  */
 import { Rng } from "./cards";
-import { Entrant, GameError, GameState, Settings, DEFAULT_SETTINGS, createGame, removePlayer, validateSettings } from "./game";
+import { BotLevel, Entrant, GameError, GameState, Settings, DEFAULT_SETTINGS, createGame, removePlayer, validateSettings } from "./game";
 
 export interface Member extends Entrant {
+  /** Set when this person is signed in with a Gloopy account (their @username). */
+  username?: string;
   joinedAt: number;
   /** "player" = has a seat for the current or next game; "waiting" = watching, queued for the next game. */
   role: "player" | "waiting";
@@ -26,7 +28,7 @@ export interface Room {
 
 const clone = <T>(x: T): T => structuredClone(x);
 
-export function createRoom(code: string, host: Entrant, now: number, settings: Settings = DEFAULT_SETTINGS): Room {
+export function createRoom(code: string, host: Entrant & { username?: string }, now: number, settings: Settings = DEFAULT_SETTINGS): Room {
   return {
     code,
     hostId: host.id,
@@ -54,7 +56,7 @@ export function nameTaken(room: Room, name: string, exceptId: string): boolean {
   return room.members.some((m) => m.id !== exceptId && key(m.name) === key(name));
 }
 
-export function joinRoom(room: Room, who: Entrant, now: number): Room {
+export function joinRoom(room: Room, who: Entrant & { username?: string }, now: number): Room {
   if (room.removed?.includes(who.id)) throw new GameError("The host removed you from this table.");
   if (nameTaken(room, who.name, who.id)) throw new GameError(`"${who.name}" is already at this table. Pick another nickname.`);
   const r = clone(room);
@@ -63,6 +65,8 @@ export function joinRoom(room: Room, who: Entrant, now: number): Room {
     existing.connected = true;
     existing.name = who.name;
     existing.avatar = who.avatar;
+    if (who.username) existing.username = who.username;
+    else delete existing.username;
     return r;
   }
   const seatFree = r.phase === "lobby" && seatedCount(r) < r.settings.maxSeats;
@@ -96,7 +100,7 @@ export function leaveRoom(room: Room, id: string): Room {
 /** Crown goes to the next connected player in seat order (or join order in the lobby), then to watchers. */
 function passCrown(r: Room) {
   const seatOf = (id: string) => r.game?.players.find((p) => p.id === id)?.seat ?? 99;
-  const players = r.members.filter((m) => m.role === "player" && m.connected && m.id !== r.hostId);
+  const players = r.members.filter((m) => m.role === "player" && m.connected && !m.bot && m.id !== r.hostId);
   const oldSeat = seatOf(r.hostId);
   players.sort((a, b) => {
     // seats after the old host's first, wrapping round
@@ -104,7 +108,7 @@ function passCrown(r: Room) {
     const sb = (seatOf(b.id) - oldSeat + 100) % 100;
     return sa - sb || a.joinedAt - b.joinedAt;
   });
-  const next = players[0] ?? waitingQueue(r).find((m) => m.connected && m.id !== r.hostId);
+  const next = players[0] ?? waitingQueue(r).find((m) => m.connected && !m.bot && m.id !== r.hostId);
   if (next) r.hostId = next.id;
 }
 
@@ -122,7 +126,12 @@ export function updateSettings(room: Room, by: string, settings: Settings): Room
   if (err) throw new GameError(err);
   const r = clone(room);
   r.settings = clone(settings);
-  // Fewer seats than players: latest arrivals move to the waiting room (never the host).
+  // Fewer seats than players: bots leave first (newest first), then latest arrivals wait (never the host).
+  while (r.members.filter((m) => m.role === "player").length > r.settings.maxSeats) {
+    const bots = r.members.filter((m) => m.bot).sort((a, b) => b.joinedAt - a.joinedAt);
+    if (!bots.length) break;
+    r.members = r.members.filter((m) => m.id !== bots[0].id);
+  }
   const seated = r.members.filter((m) => m.role === "player").sort((a, b) => a.joinedAt - b.joinedAt);
   while (seated.length > r.settings.maxSeats) {
     const idx = [...seated].reverse().findIndex((m) => m.id !== r.hostId);
@@ -141,7 +150,8 @@ export function startGame(room: Room, by: string, now: number, rng: Rng): Room {
   // Players who wandered off in the lobby lose their seat to people waiting.
   const seated = r.members.filter((m) => m.role === "player" && m.connected).sort((a, b) => a.joinedAt - b.joinedAt);
   if (seated.length < 2) throw new GameError("You need at least 2 players to start");
-  r.game = createGame(r.settings, seated.map(({ id, name, avatar }) => ({ id, name, avatar })), now, rng);
+  if (!seated.some((m) => !m.bot)) throw new GameError("At least one person needs to play");
+  r.game = createGame(r.settings, seated.map(({ id, name, avatar, bot }) => (bot ? { id, name, avatar, bot } : { id, name, avatar })), now, rng);
   r.phase = "playing";
   r.gameNumber += 1;
   return r;
@@ -193,5 +203,41 @@ export function kickMember(room: Room, by: string, target: string, now: number):
   r.members = r.members.filter((x) => x.id !== target);
   r.removed = [...(r.removed ?? []), target];
   if (r.phase === "lobby" && m.role === "player") promoteWaiting(r);
+  return r;
+}
+
+// ------------------------------------------------------------------ bots
+
+export const BOT_LEVELS: BotLevel[] = ["easy", "normal", "hard"];
+const BOT_NAMES = ["Zippy", "Bloop", "Wobble", "Jelly", "Squish", "Mochi", "Noodle", "Bubbles", "Pudding", "Gummy", "Sprinkle", "Waffle"];
+const BOT_AVATARS = ["lime", "berry", "sky", "sun", "coral", "grape", "mint", "rose", "night"];
+export const isBotId = (id: string) => id.startsWith("bot-");
+
+/** The host fills empty seats with computer players (lobby only). */
+export function addBots(room: Room, by: string, count: number, level: BotLevel, now: number, rng: Rng): Room {
+  if (room.hostId !== by) throw new GameError("Only the host can add bots");
+  if (room.phase !== "lobby") throw new GameError("Bots can only be added in the lobby");
+  if (!BOT_LEVELS.includes(level)) throw new GameError("Pick Easy, Normal or Hard");
+  const free = room.settings.maxSeats - seatedCount(room);
+  if (!Number.isInteger(count) || count < 1) throw new GameError("Add at least 1 bot");
+  if (count > free) throw new GameError(free === 0 ? "No empty seats for bots" : `Only ${free} empty seat${free === 1 ? "" : "s"}`);
+  const r = clone(room);
+  for (let i = 0; i < count; i++) {
+    const names = BOT_NAMES.filter((n) => !nameTaken(r, n, ""));
+    const name = names.length ? names[Math.floor(rng() * names.length)] : `Bot ${seatedCount(r) + 1}`;
+    const avatar = BOT_AVATARS[Math.floor(rng() * BOT_AVATARS.length)];
+    const id = "bot-" + Math.floor(rng() * 36 ** 8).toString(36).padStart(8, "0");
+    r.members.push({ id, name, avatar, bot: level, joinedAt: now + i, role: "player", connected: true });
+  }
+  return r;
+}
+
+export function removeBot(room: Room, by: string, id: string): Room {
+  if (room.hostId !== by) throw new GameError("Only the host can remove bots");
+  if (room.phase !== "lobby") throw new GameError("Bots can only be removed in the lobby");
+  if (!room.members.some((m) => m.id === id && m.bot)) throw new GameError("That bot isn't at this table");
+  const r = clone(room);
+  r.members = r.members.filter((m) => m.id !== id);
+  promoteWaiting(r);
   return r;
 }

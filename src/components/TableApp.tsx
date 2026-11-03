@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PAUSE_AFTER_SHOWDOWN_MS, showdownPauseMs } from "@/engine/game";
 import { useRoom } from "@/lib/client/useRoom";
+import { useMe } from "@/lib/client/account";
 import { loadProfile, saveProfile } from "@/lib/client/api";
 import { sounds } from "@/lib/client/sound";
 import { GLOOPS } from "@/lib/gloops";
@@ -88,6 +89,8 @@ export function TableApp({ code }: { code: string }) {
         onSettings={r.updateSettings}
         onChat={r.sendChat}
         onKick={r.kick}
+        onAddBots={r.addBots}
+        onRemoveBot={r.removeBot}
       />
     );
 
@@ -133,13 +136,20 @@ function JoinScreen({
 }) {
   const [name, setName] = useState("");
   const [avatar, setAvatar] = useState(GLOOPS[0].id);
+  const { me } = useMe();
+  const account = me?.profile ?? null;
   useEffect(() => {
+    if (account) {
+      setName(account.displayName);
+      setAvatar(account.avatar);
+      return;
+    }
     const p = loadProfile();
     if (p) {
       setName(p.name);
       setAvatar(p.avatar);
     } else setAvatar(GLOOPS[Math.floor(Math.random() * GLOOPS.length)].id);
-  }, []);
+  }, [account]);
   const host = room.members.find((m) => m.id === room.hostId);
   const seated = room.members.filter((m) => m.role === "player").length;
   const willWait = room.phase !== "lobby" || seated >= room.settings.maxSeats;
@@ -156,7 +166,17 @@ function JoinScreen({
               : "The table is full. You'll wait and watch, and get the next free seat."
             : `${seated} of ${room.settings.maxSeats} seats taken.`}
         </p>
-        <ProfilePicker name={name} avatar={avatar} onName={setName} onAvatar={setAvatar} />
+        {account ? (
+          <div className="flex items-center justify-center gap-3">
+            <Gloop id={account.avatar} size={64} />
+            <div>
+              <p className="font-display text-2xl font-extrabold">{account.displayName}</p>
+              <p className="text-sm text-ink/60">@{account.username}</p>
+            </div>
+          </div>
+        ) : (
+          <ProfilePicker name={name} avatar={avatar} onName={setName} onAvatar={setAvatar} />
+        )}
         <button
           className="btn mt-5 w-full bg-lime py-3 text-2xl"
           disabled={busy || !name.trim()}

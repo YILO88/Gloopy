@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
-import { DEFAULT_SETTINGS, SETTING_OPTIONS, Settings } from "@/engine/game";
+import { BotLevel, DEFAULT_SETTINGS, SETTING_OPTIONS, Settings } from "@/engine/game";
 import type { PublicRoom } from "@/lib/ops";
 import type { ChatMessage } from "@/lib/client/useRoom";
 import { Gloop } from "./Gloop";
@@ -18,6 +18,8 @@ export function Lobby({
   onSettings,
   onChat,
   onKick,
+  onAddBots,
+  onRemoveBot,
 }: {
   room: PublicRoom;
   me: string;
@@ -28,7 +30,11 @@ export function Lobby({
   onSettings: (s: Settings) => void;
   onChat: (kind: ChatMessage["kind"], body: string) => void;
   onKick: (id: string) => void;
+  onAddBots: (count: number, level: BotLevel) => Promise<boolean>;
+  onRemoveBot: (id: string) => void;
 }) {
+  const [botsOpen, setBotsOpen] = useState(false);
+  const accounts = room.members.filter((m) => m.role === "player" && m.username).length;
   const host = room.hostId === me;
   const players = room.members.filter((m) => m.role === "player").sort((a, b) => a.joinedAt - b.joinedAt);
   const waiting = room.members.filter((m) => m.role === "waiting").sort((a, b) => a.joinedAt - b.joinedAt);
@@ -77,13 +83,27 @@ export function Lobby({
                 <span className="flex-1 truncate font-display text-lg font-extrabold">
                   {m.name}
                   {m.id === me && <span className="font-sans text-sm font-medium"> (you)</span>}
+                  {m.bot && (
+                    <span className="ml-2 rounded-md bg-ink px-1.5 py-0.5 align-middle font-sans text-[11px] font-bold uppercase text-white">
+                      Bot · {m.bot}
+                    </span>
+                  )}
                 </span>
                 {m.id === room.hostId && (
                   <span title="Host" aria-label="Host" className="text-2xl">
                     👑
                   </span>
                 )}
-                {host && m.id !== me && <RemoveButton name={m.name} onConfirm={() => onKick(m.id)} />}
+                {host && m.bot && (
+                  <button
+                    className="grid h-7 w-7 place-items-center rounded-full border-2 border-ink/30 text-sm font-bold text-ink/60 hover:border-ink hover:text-ink"
+                    onClick={() => onRemoveBot(m.id)}
+                    aria-label={`Remove bot ${m.name}`}
+                  >
+                    ✕
+                  </button>
+                )}
+                {host && m.id !== me && !m.bot && <RemoveButton name={m.name} onConfirm={() => onKick(m.id)} />}
               </li>
             ))}
             {Array.from({ length: Math.max(0, s.maxSeats - players.length) }).map((_, i) => (
@@ -98,6 +118,23 @@ export function Lobby({
               </li>
             )}
           </ul>
+          {host && players.length === 1 && (
+            <div className="mt-3 flex items-center gap-3 rounded-2xl border-[3px] border-ink bg-mist p-3">
+              <Gloop id="lime" face="laugh" size={44} />
+              <div className="flex-1">
+                <p className="font-display text-lg font-extrabold leading-tight">Play solo with bots</p>
+                <p className="text-xs text-ink/70">Practice anytime. Solo games don&apos;t count for leaderboards.</p>
+              </div>
+              <button className="btn bg-lime px-3 py-1 text-base" onClick={() => setBotsOpen(true)}>
+                Add bots
+              </button>
+            </div>
+          )}
+          {accounts > 0 && (
+            <p className="mt-3 text-xs text-ink/70">
+              {accounts >= 2 ? "🏆 This game counts for leaderboards." : "Leaderboards count games with 2+ players who have accounts."}
+            </p>
+          )}
           {waiting.length > 0 && (
             <>
               <h3 className="mb-2 mt-4 font-display text-lg font-extrabold">Waiting room</h3>
@@ -114,6 +151,12 @@ export function Lobby({
             </>
           )}
         </Fold>
+
+        {host && (
+          <Fold title="Add bots" open={botsOpen} onToggle={setBotsOpen}>
+            <AddBots free={s.maxSeats - players.length} busy={busy} onAdd={onAddBots} />
+          </Fold>
+        )}
 
         {/* Table setup */}
         <Fold title="Table setup" defaultOpen={host} className="flex flex-col">
@@ -168,7 +211,7 @@ export function Lobby({
                 <button className="btn w-full bg-lime py-3 text-2xl" disabled={busy || players.length < 2} onClick={onStart}>
                   Start game
                 </button>
-                {players.length < 2 && <p className="mt-2 text-center text-sm">Share the link. You need at least 2 players.</p>}
+                {players.length < 2 && <p className="mt-2 text-center text-sm">Share the link or add bots. You need at least 2 players.</p>}
               </>
             ) : (
               <p className="rounded-2xl bg-mist p-3 text-center font-display text-lg font-bold">Waiting for {hostName} to start…</p>
@@ -225,15 +268,22 @@ function Fold({
   defaultOpen = false,
   flush = false,
   className = "",
+  open: openProp,
+  onToggle,
   children,
 }: {
   title: string;
   defaultOpen?: boolean;
   flush?: boolean;
   className?: string;
+  /** Optional: control the fold from outside (e.g. a button elsewhere opens it). */
+  open?: boolean;
+  onToggle?: (open: boolean) => void;
   children: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [ownOpen, setOwnOpen] = useState(defaultOpen);
+  const open = openProp ?? ownOpen;
+  const setOpen = (f: (o: boolean) => boolean) => (onToggle ? onToggle(f(open)) : setOwnOpen(f));
   return (
     <section className={`sticker overflow-hidden ${flush ? "flex flex-col" : ""}`}>
       <h2>
@@ -274,5 +324,52 @@ function RemoveButton({ name, onConfirm }: { name: string; onConfirm: () => void
     >
       ✕
     </button>
+  );
+}
+
+/** Host-only: fill empty seats with bots. How many, and how good. */
+function AddBots({ free, busy, onAdd }: { free: number; busy: boolean; onAdd: (count: number, level: BotLevel) => Promise<boolean> }) {
+  const [count, setCount] = useState(1);
+  const [level, setLevel] = useState<BotLevel>("normal");
+  const n = Math.max(1, Math.min(count, Math.max(1, free)));
+  if (free <= 0) return <p className="text-sm text-ink/70">Every seat is taken. Remove a bot or add seats in Table setup.</p>;
+  return (
+    <div>
+      <p className="mb-3 text-sm text-ink/70">Fill empty seats with computer players. Only you (the host) can add them.</p>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="font-bold">How many</span>
+        <div className="flex items-center gap-3">
+          <button className="btn grid h-10 w-10 place-items-center rounded-full bg-white p-0 text-2xl" onClick={() => setCount(n - 1)} disabled={n <= 1} aria-label="Fewer bots">
+            −
+          </button>
+          <span className="w-8 text-center font-display text-3xl font-extrabold tabular" aria-live="polite">
+            {n}
+          </span>
+          <button className="btn grid h-10 w-10 place-items-center rounded-full bg-white p-0 text-2xl" onClick={() => setCount(n + 1)} disabled={n >= free} aria-label="More bots">
+            +
+          </button>
+        </div>
+      </div>
+      <p className="mb-1.5 font-bold">How good</p>
+      <div className="flex overflow-hidden rounded-2xl border-[3px] border-ink" role="radiogroup" aria-label="Bot difficulty">
+        {(["easy", "normal", "hard"] as BotLevel[]).map((l) => (
+          <button
+            key={l}
+            role="radio"
+            aria-checked={level === l}
+            onClick={() => setLevel(l)}
+            className={`flex-1 border-r-2 border-ink py-2 font-display text-lg font-extrabold capitalize last:border-r-0 ${level === l ? "bg-lime" : "bg-white"}`}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1.5 text-xs text-ink/60">
+        {level === "easy" ? "Calls a lot, rarely bluffs. Good for learning." : level === "normal" ? "Plays the odds. A fair game." : "Bets big hands hard and bluffs sometimes."}
+      </p>
+      <button className="btn mt-3 w-full bg-lime py-2 text-xl" disabled={busy} onClick={() => onAdd(n, level).then((ok) => ok && setCount(1))}>
+        Add {n} bot{n === 1 ? "" : "s"}
+      </button>
+    </div>
   );
 }

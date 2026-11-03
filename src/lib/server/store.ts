@@ -6,6 +6,8 @@
  */
 import { Room } from "@/engine/room";
 import { PublicRoom, isExpired, newHoles, toPublic } from "@/lib/ops";
+import { pokerResultRows } from "@/lib/results";
+import type { AccountStore } from "./accounts";
 
 export interface Loaded {
   room: Room;
@@ -26,6 +28,8 @@ export interface RoomStore {
   ): Promise<boolean>;
   /** Close a table for good: the link stops working and its cards and chat are deleted. */
   remove(code: string): Promise<void>;
+  /** Where finished games are recorded for profiles and leaderboards (optional in tests). */
+  accounts?: AccountStore;
 }
 
 /** Load a table, closing it instead if it has expired (idle 24h, finished and abandoned, or empty). */
@@ -77,13 +81,27 @@ export async function mutateRoom(
       return { room: next, pub };
     }
     const ok = await store.save(code, loaded.version, next, pub, newHoles(loaded.room, next));
-    if (ok) return { room: next, pub };
+    if (ok) {
+      await recordIfFinished(store, loaded.room, next);
+      return { room: next, pub };
+    }
     await new Promise((r) => setTimeout(r, 20 + Math.random() * 60 * (attempt + 1)));
   }
   throw new ConflictError("The table is busy, try again");
 }
 
 export class NotFoundError extends Error {}
+
+/** The moment a game ends, write each person's result. Never lets a recording problem break the game. */
+async function recordIfFinished(store: RoomStore, before: Room, after: Room) {
+  if (!store.accounts || after.game?.status !== "finished") return;
+  if (before.game?.status === "finished" && before.gameNumber === after.gameNumber) return;
+  try {
+    await store.accounts.recordResults(pokerResultRows(after));
+  } catch (e) {
+    console.error("couldn't record results", e);
+  }
+}
 
 // ------------------------------------------------------------------ in-memory
 
@@ -93,6 +111,7 @@ export class MemoryStore implements RoomStore {
   chat = new Map<string, ChatRow[]>();
   /** Simulate someone else saving between load and save (for tests). */
   interfere?: (code: string) => void;
+  constructor(public accounts?: AccountStore) {}
 
   async load(code: string) {
     const r = this.rooms.get(code);

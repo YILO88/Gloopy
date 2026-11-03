@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { useMe } from "@/lib/client/account";
 import { ProfilePicker } from "@/components/ProfilePicker";
 import { Gloop } from "@/components/Gloop";
 import { PlayingCard } from "@/components/PlayingCard";
@@ -23,14 +25,22 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
+  const { me } = useMe();
+  const account = me?.profile ?? null;
 
   useEffect(() => {
+    if (account) {
+      // Signed in: always play as my account's name and Gloop.
+      setName(account.displayName);
+      setAvatar(account.avatar);
+      return;
+    }
     const p = loadProfile();
     if (p) {
       setName(p.name);
       setAvatar(p.avatar);
     } else setAvatar(GLOOPS[Math.floor(Math.random() * GLOOPS.length)].id);
-  }, []);
+  }, [account]);
 
   const ready = name.trim().length > 0;
 
@@ -66,6 +76,17 @@ export default function Home() {
       <div aria-hidden className="pointer-events-none absolute -left-24 top-40 h-72 w-72 rounded-full bg-pond-deep" />
       <div aria-hidden className="pointer-events-none absolute -right-20 -top-16 h-64 w-64 rounded-full bg-pond-deep" />
 
+      <div className="relative mx-auto -mt-4 mb-2 flex max-w-4xl justify-end">
+        {account ? (
+          <Link href={`/u/${account.username}`} className="btn flex items-center gap-1.5 bg-white py-0.5 pl-1 pr-3 text-base" aria-label="My profile">
+            <Gloop id={account.avatar} size={28} /> @{account.username}
+          </Link>
+        ) : (
+          <Link href="/account" className="btn bg-white px-3 py-0.5 text-base">
+            Sign in
+          </Link>
+        )}
+      </div>
       <header className="relative mx-auto mb-6 flex max-w-4xl items-end justify-center gap-3">
         <h1 className="font-display text-6xl font-extrabold leading-none tracking-tight text-lime [text-shadow:0_4px_0_#1c1b3a] sm:text-7xl">
           gloopy
@@ -86,7 +107,20 @@ export default function Home() {
           <h2 id="you" className="sr-only">
             Your Gloop
           </h2>
-          <ProfilePicker name={name} avatar={avatar} onName={setName} onAvatar={setAvatar} />
+          {account ? (
+            <div className="flex items-center gap-3">
+              <Gloop id={account.avatar} size={72} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-display text-2xl font-extrabold">{account.displayName}</p>
+                <p className="text-sm text-ink/60">@{account.username} · ready to play</p>
+              </div>
+              <Link href="/account" className="text-sm underline">
+                Edit
+              </Link>
+            </div>
+          ) : (
+            <ProfilePicker name={name} avatar={avatar} onName={setName} onAvatar={setAvatar} />
+          )}
           <button className="btn mt-5 w-full bg-lime py-3 text-2xl text-ink" onClick={create} disabled={busy}>
             {busy ? "Creating…" : "Create table"}
           </button>
@@ -110,6 +144,34 @@ export default function Home() {
             </p>
           )}
         </section>
+
+        {me && (
+          <div className="md:col-span-2 md:order-last">
+            {account ? (
+              <nav className="grid grid-cols-3 gap-3" aria-label="Your Gloopy">
+                {[
+                  ["/leaderboard", "🏆", "Leaderboards"],
+                  ["/friends", "👯", "Friends"],
+                  [`/u/${account.username}`, "", "Profile"],
+                ].map(([href, icon, label]) => (
+                  <Link key={href} href={href} className="sticker flex flex-col items-center gap-1 px-1 py-3 text-center font-display text-sm font-extrabold sm:text-lg">
+                    {icon ? <span className="text-3xl leading-none">{icon}</span> : <Gloop id={account.avatar} size={32} />}
+                    {label}
+                  </Link>
+                ))}
+              </nav>
+            ) : (
+              <Link href="/account" className="sticker flex items-center gap-3 bg-lime p-4">
+                <Gloop id="sun" face="cool" size={52} />
+                <span className="flex-1">
+                  <span className="block font-display text-xl font-extrabold">Track your wins</span>
+                  <span className="block text-sm">Free account: stats, friends and leaderboards. Guests can keep playing as now.</span>
+                </span>
+                <span className="font-display text-3xl font-extrabold">›</span>
+              </Link>
+            )}
+          </div>
+        )}
 
         <section className="sticker flex flex-col p-5 sm:p-6" aria-labelledby="how">
           <div className="flex items-center justify-between gap-2">

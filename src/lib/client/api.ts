@@ -35,7 +35,8 @@ function devId(): string {
 export async function identity(): Promise<{ id: string; token: string }> {
   if (DEV) {
     const id = devId();
-    return { id, token: "dev-" + id };
+    // Test mode stands in for Discord/Google/email: a flag in this tab means "signed in".
+    return { id, token: (sessionStorage.getItem("gloopy.devAccount") ? "devacct-" : "dev-") + id };
   }
   const sb = supabase();
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL) throw new Error("Couldn't sign in: the Supabase URL is missing from Vercel's settings.");

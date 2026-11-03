@@ -4,11 +4,13 @@
  * Pure: easy to test, and the API route just loads → applyOp → saves.
  */
 import { Rng } from "@/engine/cards";
-import { Action, GameError, PublicGame, Settings, act, advance, holeCards, publicView, showCards } from "@/engine/game";
+import { Action, BotLevel, GameError, PublicGame, Settings, act, advance, holeCards, publicView, showCards } from "@/engine/game";
 import {
   Member,
   Room,
+  addBots,
   backToLobby,
+  removeBot,
   createRoom,
   joinRoom,
   kickMember,
@@ -20,7 +22,7 @@ import {
 import { isGloop } from "./gloops";
 
 export type Op =
-  | { op: "join"; name: string; avatar: string }
+  | { op: "join"; name: string; avatar: string; /** set by the server from the caller's account, never by the browser */ username?: string }
   | { op: "leave" }
   | { op: "settings"; settings: Settings }
   | { op: "start" }
@@ -28,12 +30,17 @@ export type Op =
   | { op: "tick" }
   | { op: "again" }
   | { op: "kick"; target: string }
-  | { op: "show" };
+  | { op: "show" }
+  | { op: "addBots"; count: number; level: BotLevel }
+  | { op: "removeBot"; id: string };
 
 export interface PublicMember {
   id: string;
   name: string;
   avatar: string;
+  bot?: BotLevel;
+  /** @username if they're signed in with an account. */
+  username?: string;
   role: Member["role"];
   connected: boolean;
   joinedAt: number;
@@ -80,8 +87,8 @@ export function cleanAvatar(avatar: unknown): string {
   return avatar;
 }
 
-export function newRoom(code: string, userId: string, name: unknown, avatar: unknown, now: number): Room {
-  return createRoom(code, { id: userId, name: cleanName(name), avatar: cleanAvatar(avatar) }, now);
+export function newRoom(code: string, userId: string, name: unknown, avatar: unknown, now: number, username?: string): Room {
+  return createRoom(code, { id: userId, name: cleanName(name), avatar: cleanAvatar(avatar), ...(username ? { username } : {}) }, now);
 }
 
 function requireMember(room: Room, userId: string) {
@@ -96,7 +103,7 @@ export function applyOp(room: Room, userId: string, op: Op, now: number, rng: Rn
 
   switch (op.op) {
     case "join":
-      r = joinRoom(r, { id: userId, name: cleanName(op.name), avatar: cleanAvatar(op.avatar) }, now);
+      r = joinRoom(r, { id: userId, name: cleanName(op.name), avatar: cleanAvatar(op.avatar), ...(op.username ? { username: op.username } : {}) }, now);
       break;
     case "leave":
       requireMember(r, userId);
@@ -123,6 +130,13 @@ export function applyOp(room: Room, userId: string, op: Op, now: number, rng: Rn
       if (typeof op.target !== "string") throw new GameError("Pick a player to remove");
       r = kickMember(r, userId, op.target, now);
       break;
+    case "addBots":
+      r = addBots(r, userId, Number(op.count), op.level, now, rng);
+      break;
+    case "removeBot":
+      if (typeof op.id !== "string") throw new GameError("Pick a bot");
+      r = removeBot(r, userId, op.id);
+      break;
     case "show":
       requireMember(r, userId);
       if (!r.game) throw new GameError("No game in progress");
@@ -140,7 +154,16 @@ export function toPublic(room: Room, now: number): PublicRoom {
     hostId: room.hostId,
     phase: room.phase,
     settings: room.settings,
-    members: room.members.map(({ id, name, avatar, role, connected, joinedAt }) => ({ id, name, avatar, role, connected, joinedAt })),
+    members: room.members.map(({ id, name, avatar, role, connected, joinedAt, bot, username }) => ({
+      id,
+      name,
+      avatar,
+      role,
+      connected,
+      joinedAt,
+      ...(bot ? { bot } : {}),
+      ...(username ? { username } : {}),
+    })),
     gameNumber: room.gameNumber,
     game: room.game ? publicView(room.game) : null,
     savedAt: now,
@@ -154,5 +177,7 @@ export function newHoles(before: Room | null, after: Room): { player_id: string;
   if (!g?.hand) return null;
   const same = before?.game && before.gameNumber === after.gameNumber && before.game.handNumber === g.handNumber;
   if (same) return null;
-  return g.hand.order.map((id) => ({ player_id: id, hand_number: g.handNumber, cards: holeCards(g, id) }));
+  // Bots' cards stay in the server's copy only: nobody needs them sent anywhere.
+  const people = g.hand.order.filter((id) => !g.players.find((p) => p.id === id)?.bot);
+  return people.map((id) => ({ player_id: id, hand_number: g.handNumber, cards: holeCards(g, id) }));
 }

@@ -13,6 +13,7 @@
  */
 import { Card, Rng, newDeck, shuffle } from "./cards";
 import { compareScores, describeHand, evaluateBest } from "./evaluate";
+import { botDecision } from "./bots";
 
 // ---------------------------------------------------------------- settings
 
@@ -94,10 +95,14 @@ export const MAX_STRIKES = 3;
 
 // ---------------------------------------------------------------- state
 
+export type BotLevel = "easy" | "normal" | "hard";
+
 export interface Entrant {
   id: string;
   name: string;
   avatar: string;
+  /** Set for computer players added by the host. */
+  bot?: BotLevel;
 }
 
 export interface Player extends Entrant {
@@ -185,6 +190,13 @@ export interface GameState {
   ranking?: RankEntry[];
   /** Chips held by the dealer after players were kicked. */
   heldByDealer: number;
+  /** Highlights per player for profiles: biggest pot won, best hand shown at a showdown. */
+  stats?: Record<string, PlayerStats>;
+}
+
+export interface PlayerStats {
+  biggestPot: number;
+  bestHand?: { score: number[]; name: string; cards: Card[] };
 }
 
 export class GameError extends Error {}
@@ -493,7 +505,9 @@ function progressMut(state: GameState, now: number, lastActor: string): GameStat
     const next = nextToAct(h, lastActor);
     if (next) {
       h.toAct = next;
-      h.deadline = now + reveal + state.settings.turnSeconds * 1000;
+      const bot = player(state, next).bot;
+      // Bots "think" for a moment so the table feels natural, then move when the clock reaches it.
+      h.deadline = now + reveal + (bot ? botThinkMs(bot, h.number, h.order.indexOf(next), h.board.length) : state.settings.turnSeconds * 1000);
       return state;
     }
     // Betting round is over.
@@ -586,6 +600,20 @@ function settleMut(state: GameState, now: number, showdown: boolean, boardReveal
     pot.winners = ordered;
   }
 
+  // Highlights for profiles.
+  state.stats ??= {};
+  for (const [id, amount] of Object.entries(result.won)) {
+    const st = (state.stats[id] ??= { biggestPot: 0 });
+    st.biggestPot = Math.max(st.biggestPot, amount);
+  }
+  if (showdown) {
+    for (const id of live) {
+      const v = evaluateBest([...h.seats[id].hole, ...h.board]);
+      const st = (state.stats[id] ??= { biggestPot: 0 });
+      if (!st.bestHand || compareScores(v.score, st.bestHand.score) > 0) st.bestHand = { score: v.score, name: v.name, cards: v.cards };
+    }
+  }
+
   h.result = result;
   h.street = "complete";
   h.toAct = null;
@@ -602,7 +630,9 @@ function settleMut(state: GameState, now: number, showdown: boolean, boardReveal
 
   const timeUp =
     state.settings.endMode === "timed" && now >= state.startedAt + state.settings.timeLimitMin * 60_000;
-  if (dealable(state).length < 2 || timeUp) {
+  // Only bots left to play: no point dealing on for nobody.
+  const humansLeft = dealable(state).some((p) => !p.bot);
+  if (dealable(state).length < 2 || timeUp || !humansLeft) {
     finishMut(state, now);
   } else {
     state.nextHandAt = now + (showdown ? showdownPauseMs(boardReveal) : PAUSE_AFTER_FOLD_MS);
@@ -641,6 +671,24 @@ export function computeRanking(state: GameState): RankEntry[] {
 }
 
 // ---------------------------------------------------------------- timers
+
+/** How long a bot takes over a move: a little longer for harder bots and later streets, never the same twice. */
+export function botThinkMs(level: BotLevel, hand: number, seatIndex: number, boardCards: number): number {
+  const base = level === "easy" ? 900 : level === "normal" ? 1200 : 1500;
+  const wobble = ((hand * 7 + seatIndex * 13 + boardCards * 5) % 9) * 110; // 0..880ms
+  return base + wobble + boardCards * 60;
+}
+
+function botMoveMut(state: GameState, id: string, now: number, level: BotLevel, rng: Rng) {
+  let action = botDecision(state, id, level, rng);
+  const legal = legalActions(state, id);
+  // Safety net: never let a bot make an illegal move.
+  if (action.type === "check" && !legal.canCheck) action = { type: "call" };
+  if (action.type === "raise" && (!legal.canRaise || action.to < legal.minRaiseTo)) action = legal.canCheck ? { type: "check" } : { type: "call" };
+  if (action.type === "raise" && action.to >= legal.maxRaiseTo) action = { type: "allin" };
+  applyAction(state, id, action);
+  progressMut(state, now, id);
+}
 
 /** Applies a missed turn: check if free, otherwise fold. 3 in a row and the player is removed. */
 function missTurnMut(state: GameState, now: number) {
@@ -720,7 +768,9 @@ export function advance(state: GameState, now: number, rng: Rng): GameState {
     const h = st.hand;
     if (h && h.toAct && h.deadline !== null && now >= h.deadline) {
       if (st === state) st = clone(state);
-      missTurnMut(st, h.deadline);
+      const bot = player(st, h.toAct).bot;
+      if (bot) botMoveMut(st, h.toAct, h.deadline, bot, rng);
+      else missTurnMut(st, h.deadline);
       continue;
     }
     if (h && h.street === "complete" && st.status === "playing" && st.nextHandAt !== null && now >= st.nextHandAt) {
@@ -748,6 +798,7 @@ export interface PublicSeat {
   id: string;
   name: string;
   avatar: string;
+  bot?: BotLevel;
   seat: number;
   chips: number;
   status: Player["status"];
@@ -807,6 +858,7 @@ export function publicView(state: GameState): PublicGame {
         id: p.id,
         name: p.name,
         avatar: p.avatar,
+        ...(p.bot ? { bot: p.bot } : {}),
         seat: p.seat,
         chips: p.chips,
         status: p.status,

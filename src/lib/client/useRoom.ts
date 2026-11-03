@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Action } from "@/engine/game";
-import type { Settings } from "@/engine/game";
+import type { BotLevel, Settings } from "@/engine/game";
 import type { PublicRoom } from "@/lib/ops";
 import { ApiError, DEV, RoomResponse, api, identity, supabase } from "./api";
 
@@ -210,6 +210,8 @@ export function useRoom(code: string) {
     act: (action: Action) => send({ op: "act", action }),
     kick: (target: string) => send({ op: "kick", target }),
     showMyCards: () => send({ op: "show" }),
+    addBots: (count: number, level: BotLevel) => send({ op: "addBots", count, level }),
+    removeBot: (id: string) => send({ op: "removeBot", id }),
     sendChat,
   };
 }

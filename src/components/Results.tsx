@@ -6,6 +6,9 @@ import type { ChatMessage } from "@/lib/client/useRoom";
 import { Gloop } from "./Gloop";
 import { Chat } from "./Chat";
 import { ShareWin } from "./ShareWin";
+import Link from "next/link";
+import { useMe } from "@/lib/client/account";
+import { api } from "@/lib/client/api";
 
 /** End of game: winner sees "You won"; everyone gets the leaderboard and a sound. */
 export function Results({
@@ -27,6 +30,18 @@ export function Results({
 }) {
   const [tab, setTab] = useState<"board" | "chat">("board");
   const [sharing, setSharing] = useState(false);
+  const { me: account } = useMe();
+  const signedIn = !!account?.profile;
+  const [asked, setAsked] = useState<Record<string, string>>({});
+  const addFriend = async (username: string) => {
+    setAsked((a) => ({ ...a, [username]: "…" }));
+    try {
+      const r = await api<{ status: string }>("/api/friends", { op: "request", username });
+      setAsked((a) => ({ ...a, [username]: r.status === "friends" ? "Friends" : "Sent" }));
+    } catch {
+      setAsked((a) => ({ ...a, [username]: "Try later" }));
+    }
+  };
   // New messages since the chat was last open (the chat icon shows the count).
   const [seen, setSeen] = useState(chat.length);
   useEffect(() => {
@@ -82,7 +97,21 @@ export function Results({
               <span className="flex-1 truncate font-semibold">
                 {r.name}
                 {r.id === me && " (you)"}
+                {room.members.find((m) => m.id === r.id)?.bot && (
+                  <span className="ml-1.5 rounded bg-ink px-1 align-middle text-[10px] font-bold uppercase text-white">Bot</span>
+                )}
               </span>
+              {(() => {
+                const u = room.members.find((m) => m.id === r.id)?.username;
+                if (!signedIn || !u || r.id === me || u === account?.profile?.username) return null;
+                return asked[u] ? (
+                  <span className="text-xs font-bold">{asked[u]}</span>
+                ) : (
+                  <button className="rounded-full border-2 border-ink bg-white px-2 text-xs font-bold" onClick={() => addFriend(u)} aria-label={`Add ${r.name} as a friend`}>
+                    + Friend
+                  </button>
+                );
+              })()}
               <span className="text-sm tabular">
                 {r.status === "kicked" ? "Left" : r.status === "busted" ? "Out" : r.chips.toLocaleString()}
               </span>
@@ -128,6 +157,14 @@ export function Results({
             footer={`Table ${room.code} · ${typeof window !== "undefined" ? window.location.host : "gloopy"}`}
             onClose={() => setSharing(false)}
           />
+        )}
+        {account && !signedIn && (
+          <Link href={`/account?next=/t/${room.code}`} className="mt-3 flex items-center gap-2 rounded-2xl border-[3px] border-ink bg-lime px-3 py-2">
+            <span className="flex-1 text-sm">
+              <b>Track your wins.</b> Create a free account and this game goes in your history.
+            </span>
+            <span className="font-display text-2xl font-extrabold">›</span>
+          </Link>
         )}
         <p className="mt-3 text-center text-xs text-ink/60">This table closes 15 minutes after the game, or when everyone has left.</p>
       </div>
